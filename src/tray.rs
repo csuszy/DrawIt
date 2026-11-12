@@ -30,13 +30,15 @@ const WM_TRAY_CALLBACK: u32 = WM_USER + 100;
 const HOTKEY_CTRL_2: i32 = 1;
 const HOTKEY_CTRL_ALT_D: i32 = 2;
 const HOTKEY_WIN_ALT_D: i32 = 3;
+const HOTKEY_F8: i32 = 4;
 
 const ID_TRAY_START: usize = 1001;
-const ID_TRAY_UPDATE: usize = 1002;
-const ID_TRAY_HELP: usize = 1003;
-const ID_TRAY_ABOUT: usize = 1004;
-const ID_TRAY_AUTOSTART: usize = 1005;
-const ID_TRAY_EXIT: usize = 1006;
+const ID_TRAY_SETTINGS: usize = 1002;
+const ID_TRAY_UPDATE: usize = 1003;
+const ID_TRAY_HELP: usize = 1004;
+const ID_TRAY_ABOUT: usize = 1005;
+const ID_TRAY_AUTOSTART: usize = 1006;
+const ID_TRAY_EXIT: usize = 1007;
 
 pub struct TrayState {
     pub tray_hwnd: HWND,
@@ -205,6 +207,14 @@ unsafe extern "system" fn tray_wndproc(
                     ID_TRAY_START => {
                         show_overlay(state.overlay_hwnd);
                     }
+                    ID_TRAY_SETTINGS => {
+                        show_overlay(state.overlay_hwnd);
+                        let ov_ptr = GetWindowLongPtrW(state.overlay_hwnd, GWLP_USERDATA) as *mut OverlayState;
+                        if !ov_ptr.is_null() {
+                            (*ov_ptr).active_modal = ActiveModal::Settings;
+                            (*ov_ptr).render();
+                        }
+                    }
                     ID_TRAY_UPDATE => {
                         crate::updater::prompt_and_update(state.tray_hwnd, true);
                     }
@@ -262,6 +272,7 @@ unsafe fn show_tray_context_menu(state: &TrayState) {
 
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_START, w!("Rajzolás indítása (Ctrl + 2)"));
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, w!("Beállítások..."));
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_UPDATE, w!("Frissítések keresése..."));
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_HELP, w!("Útmutató és billentyűk (F1)"));
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_ABOUT, w!("Névjegy"));
@@ -350,6 +361,8 @@ pub fn init_tray_and_hotkeys(overlay_hwnd: HWND) -> Option<HWND> {
         let _ = RegisterHotKey(hwnd, HOTKEY_CTRL_ALT_D, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x44);
         // 3. Fallback: Win + Alt + D
         let _ = RegisterHotKey(hwnd, HOTKEY_WIN_ALT_D, MOD_WIN | MOD_ALT | MOD_NOREPEAT, 0x44);
+        // 4. Fallback: F8
+        let _ = RegisterHotKey(hwnd, HOTKEY_F8, MOD_NOREPEAT, 0x77);
 
         Some(hwnd)
     }

@@ -11,7 +11,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, RegisterHotKey, ReleaseCapture, SetActiveWindow, SetCapture, SetFocus,
-    UnregisterHotKey, HOT_KEY_MODIFIERS, VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F1,
+    UnregisterHotKey, HOT_KEY_MODIFIERS, VK_CONTROL, VK_DELETE, VK_ESCAPE, VK_F1, VK_MENU, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, GetCursorPos, GetSystemMetrics, LoadCursorW, LoadImageW,
@@ -20,7 +20,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     HCURSOR, HICON, HWND_TOPMOST, IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_IBEAM, IDC_SIZEALL,
     IMAGE_ICON, LR_DEFAULTCOLOR, LR_SHARED, SM_CXICON, SM_CXSMICON, SM_CYICON, SM_CYSMICON,
     SW_HIDE, SW_SHOW, WM_CHAR, WM_DESTROY, WM_ERASEBKGND, WM_HOTKEY,
-    WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONDOWN,
+    WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT, WM_RBUTTONDOWN,
     WM_SETCURSOR, WM_SETICON, WM_TIMER, WM_MOUSEWHEEL, WNDCLASSEXW, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
@@ -106,6 +106,11 @@ pub struct OverlayState {
     pub is_dragging_lightness: bool,
     pub pipette_buffer: Option<Vec<u8>>,
     pub previous_tool_before_pipette: ToolMode,
+    pub base_tool: ToolMode,
+    pub active_spring_tool: Option<ToolMode>,
+    pub held_key_down: Option<(u32, std::time::Instant)>,
+    pub ctrl_used_for_shortcut: bool,
+    pub temp_settings: crate::settings::AppSettings,
     pub active_modal: ActiveModal,
     pub hovered_modal_btn: Option<ModalButton>,
 }
@@ -122,7 +127,10 @@ impl OverlayState {
             )
         };
 
-        let toolbar = Toolbar::new(capture.width as f32, capture.monitors.clone());
+        let mut toolbar = Toolbar::new(capture.width as f32, capture.monitors.clone());
+        let settings = crate::settings::get_settings();
+        toolbar.thickness = settings.last_thickness;
+        toolbar.set_color_rgb(settings.last_color);
 
         Self {
             hwnd,
@@ -159,6 +167,11 @@ impl OverlayState {
             is_dragging_lightness: false,
             pipette_buffer: None,
             previous_tool_before_pipette: ToolMode::Freehand,
+            base_tool: ToolMode::Freehand,
+            active_spring_tool: None,
+            held_key_down: None,
+            ctrl_used_for_shortcut: false,
+            temp_settings: settings,
             active_modal: ActiveModal::None,
             hovered_modal_btn: None,
         }
@@ -685,9 +698,10 @@ impl OverlayState {
             self.render_brush_cursor(d2d);
         }
 
-        // 9. Render In-App Modal Dialog (Help / About)
+        // 9. Render In-App Modal Dialog (Help / Settings / About)
         match self.active_modal {
             ActiveModal::Help => self.render_help_modal(d2d),
+            ActiveModal::Settings => self.render_settings_modal(d2d),
             ActiveModal::About => self.render_about_modal(d2d),
             ActiveModal::None => {}
         }
@@ -768,6 +782,18 @@ impl OverlayState {
                 let card_rect = (mx, my, mx + mw, my + mh);
                 let close_btn = (mx + mw - 38.0, my + 10.0, mx + mw - 10.0, my + 38.0);
                 let action_btn = (mx + (mw - 130.0) / 2.0, my + mh - 42.0, mx + (mw + 130.0) / 2.0, my + mh - 12.0);
+
+                Some((card_rect, close_btn, action_btn))
+            }
+            ActiveModal::Settings => {
+                let mw = 640.0;
+                let mh = 560.0;
+                let mx = (mon_x + (mon_w - mw) / 2.0).max(mon_x + 10.0);
+                let my = (mon_y + (mon_h - mh) / 2.0).max(mon_y + 10.0);
+
+                let card_rect = (mx, my, mx + mw, my + mh);
+                let close_btn = (mx + mw - 38.0, my + 10.0, mx + mw - 10.0, my + 38.0);
+                let action_btn = (mx + (mw - 180.0) / 2.0, my + mh - 44.0, mx + (mw + 180.0) / 2.0, my + mh - 12.0);
 
                 Some((card_rect, close_btn, action_btn))
             }
@@ -874,6 +900,190 @@ impl OverlayState {
         d2d.fill_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, act_bg);
         d2d.draw_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, (1.0, 1.0, 1.0, 0.3), 1.0);
         d2d.draw_text_simple("Rendben", act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
+    }
+
+    pub fn get_settings_controls(&self) -> Option<(Vec<(String, (f32, f32, f32, f32))>, (f32, f32, f32, f32), (f32, f32, f32, f32))> {
+        let (card, _, _) = self.get_modal_layout()?;
+        let (mx, my, mx2, _) = card;
+        let mw = mx2 - mx;
+        let left_x = mx + 22.0;
+        let right_x = mx + mw - 22.0;
+
+        let hk_y = my + 242.0;
+        let btn_w = 134.0;
+        let btn_gap = 12.0;
+        let start_btn_x = left_x + 8.0;
+        let hotkey_options = ["Ctrl+2", "F8", "Ctrl+Alt+D", "Win+Alt+D"];
+        let mut hk_rects = Vec::new();
+        for (idx, opt) in hotkey_options.iter().enumerate() {
+            let bx1 = start_btn_x + (idx as f32) * (btn_w + btn_gap);
+            let by1 = hk_y;
+            let bx2 = bx1 + btn_w;
+            let by2 = by1 + 32.0;
+            hk_rects.push((opt.to_string(), (bx1, by1, bx2, by2)));
+        }
+
+        let auto_y = my + 322.0;
+        let auto_r = (left_x + 8.0, auto_y, right_x, auto_y + 24.0);
+
+        let upd_y = my + 354.0;
+        let upd_r = (left_x + 8.0, upd_y, right_x, upd_y + 24.0);
+
+        Some((hk_rects, auto_r, upd_r))
+    }
+
+    fn render_settings_modal(&self, d2d: &D2DContext) {
+        let (card, close, act) = match self.get_modal_layout() {
+            Some(l) => l,
+            None => return,
+        };
+
+        let (mx, my, mx2, my2) = card;
+        let mw = mx2 - mx;
+
+        // 1. Semi-transparent dark overlay dimming
+        d2d.fill_rectangle(0.0, 0.0, self.capture.width as f32, self.capture.height as f32, (0.0, 0.0, 0.0, 0.55));
+
+        // 2. Drop shadows
+        d2d.fill_rounded_rectangle(mx - 4.0, my + 4.0, mx2 + 4.0, my2 + 12.0, 16.0, (0.0, 0.0, 0.0, 0.45));
+        d2d.fill_rounded_rectangle(mx - 2.0, my + 2.0, mx2 + 2.0, my2 + 6.0, 16.0, (0.0, 0.0, 0.0, 0.30));
+
+        // 3. Card body
+        d2d.fill_rounded_rectangle(mx, my, mx2, my2, 16.0, (0.10, 0.12, 0.16, 0.97));
+        d2d.draw_rounded_rectangle(mx, my, mx2, my2, 16.0, (1.0, 1.0, 1.0, 0.16), 1.2);
+
+        // 4. Header title & close button
+        d2d.draw_gear_icon(mx + 30.0, my + 25.0, (0.22, 0.74, 0.97, 1.0), 1.6);
+        d2d.draw_text_simple("DrawIt – Beállítások", mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
+
+        let is_close_hov = self.hovered_modal_btn == Some(ModalButton::Close);
+        let close_cx = (close.0 + close.2) / 2.0;
+        let close_cy = (close.1 + close.3) / 2.0;
+        if is_close_hov {
+            d2d.fill_rounded_rectangle(close.0, close.1, close.2, close.3, 7.0, (1.0, 0.23, 0.19, 0.85));
+            d2d.draw_close_icon(close_cx, close_cy, 4.5, (1.0, 1.0, 1.0, 1.0), 1.8);
+        } else {
+            d2d.draw_close_icon(close_cx, close_cy, 4.5, (0.75, 0.77, 0.80, 1.0), 1.6);
+        }
+
+        // Header separator
+        d2d.draw_line(mx + 16.0, my + 46.0, mx + mw - 16.0, my + 46.0, (1.0, 1.0, 1.0, 0.12), 1.0);
+
+        let left_x = mx + 22.0;
+        let right_x = mx + mw - 22.0;
+        let mut cur_y = my + 54.0;
+
+        // SECTION 1: Rugós és Gyorsbillentyűk
+        d2d.draw_text_simple("Gyorsbillentyűk & Rugós eszközök (Hold / Tap):", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+        cur_y += 24.0;
+
+        let draw_key_pill = |d2d: &D2DContext, k_text: &str, l_text: &str, kx: f32, ky: f32, kw: f32, total_w: f32| {
+            d2d.fill_rounded_rectangle(kx, ky, kx + kw, ky + 22.0, 5.0, (1.0, 1.0, 1.0, 0.14));
+            d2d.draw_rounded_rectangle(kx, ky, kx + kw, ky + 22.0, 5.0, (1.0, 1.0, 1.0, 0.28), 1.0);
+            d2d.draw_text_simple(k_text, kx, ky, kx + kw, ky + 22.0, 11.0, (1.0, 1.0, 1.0, 1.0), true, true);
+            d2d.draw_text_simple(l_text, kx + kw + 8.0, ky + 2.0, kx + total_w, ky + 22.0, 11.5, (0.85, 0.88, 0.92, 1.0), false, false);
+        };
+
+        // Row 1: Shift (Vonal), Ctrl (Nyíl), Ctrl+Shift (Számozott nyíl)
+        draw_key_pill(d2d, "Shift", "Vonal", left_x + 8.0, cur_y, 48.0, 140.0);
+        draw_key_pill(d2d, "Ctrl", "Nyíl", left_x + 155.0, cur_y, 44.0, 135.0);
+        draw_key_pill(d2d, "Ctrl + Shift", "Számozott nyíl", left_x + 295.0, cur_y, 90.0, 260.0);
+        cur_y += 28.0;
+
+        // Row 2: X (Blur), R (Téglalap), C (Kör), T (Szöveg)
+        draw_key_pill(d2d, "X", "Elmosás", left_x + 8.0, cur_y, 26.0, 120.0);
+        draw_key_pill(d2d, "R", "Téglalap", left_x + 135.0, cur_y, 26.0, 120.0);
+        draw_key_pill(d2d, "C", "Kör", left_x + 265.0, cur_y, 26.0, 110.0);
+        draw_key_pill(d2d, "T", "Szöveg", left_x + 380.0, cur_y, 26.0, 110.0);
+        cur_y += 28.0;
+
+        // Row 3: S (Kivágás), I (Pipetta), P (Ceruza), Esc (Elvetés)
+        draw_key_pill(d2d, "S", "Kivágás", left_x + 8.0, cur_y, 26.0, 120.0);
+        draw_key_pill(d2d, "I", "Pipetta", left_x + 135.0, cur_y, 26.0, 120.0);
+        draw_key_pill(d2d, "P", "Ceruza", left_x + 265.0, cur_y, 26.0, 110.0);
+        draw_key_pill(d2d, "Esc", "Bezárás", left_x + 380.0, cur_y, 36.0, 130.0);
+        cur_y += 30.0;
+
+        // Tip text
+        d2d.draw_text_simple("💡 Tipp: Tartsd nyomva a billentyűt az ideiglenes rajzhoz (elengedve visszaugrik),", left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.70, 0.75, 0.82, 1.0), false, false);
+        cur_y += 18.0;
+        d2d.draw_text_simple("    vagy nyomd meg egyszer a végleges eszközváltáshoz!", left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.70, 0.75, 0.82, 1.0), false, false);
+        cur_y += 24.0;
+
+        // Separator line 2
+        d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
+        cur_y += 12.0;
+
+        // SECTION 2: Globális indítóbillentyű
+        d2d.draw_text_simple("Globális aktiváló gyorsbillentyű (Bárhonnan a rendszerből):", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+        cur_y += 24.0;
+
+        let hotkey_options = ["Ctrl+2", "F8", "Ctrl+Alt+D", "Win+Alt+D"];
+        let btn_w = 134.0;
+        let btn_gap = 12.0;
+        let start_btn_x = left_x + 8.0;
+
+        for (idx, opt) in hotkey_options.iter().enumerate() {
+            let bx1 = start_btn_x + (idx as f32) * (btn_w + btn_gap);
+            let by1 = cur_y;
+            let bx2 = bx1 + btn_w;
+            let by2 = by1 + 32.0;
+
+            let is_selected = self.temp_settings.global_hotkey == *opt;
+            if is_selected {
+                d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (0.04, 0.52, 1.0, 0.95));
+                d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.4), 1.2);
+                let label = format!("✓  {}", opt);
+                d2d.draw_text_simple(&label, bx1, by1, bx2, by2, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+            } else {
+                d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.07));
+                d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.15), 1.0);
+                d2d.draw_text_simple(opt, bx1, by1, bx2, by2, 12.0, (0.85, 0.88, 0.92, 1.0), false, true);
+            }
+        }
+        cur_y += 44.0;
+
+        // Separator line 3
+        d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
+        cur_y += 12.0;
+
+        // SECTION 3: Rendszer beállítások
+        d2d.draw_text_simple("Rendszer és Indítás:", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+        cur_y += 24.0;
+
+        // Toggle 1: Autostart
+        let check_box_size = 18.0;
+        let cb_y = cur_y + 2.0;
+        if self.temp_settings.autostart {
+            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
+            d2d.draw_text_simple("✓", left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+        } else {
+            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
+            d2d.draw_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+        }
+        d2d.draw_text_simple("Indítás a Windows-zal (Autostart a tálcán a háttérben)", left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
+        cur_y += 32.0;
+
+        // Toggle 2: Auto check update
+        let cb_y2 = cur_y + 2.0;
+        if self.temp_settings.check_updates {
+            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
+            d2d.draw_text_simple("✓", left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+        } else {
+            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
+            d2d.draw_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+        }
+        d2d.draw_text_simple("Frissítések automatikus keresése indításkor (GitHub Releases)", left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
+        cur_y += 34.0;
+
+        d2d.draw_text_simple("A beállítások automatikusan hordozható formátumban (settings.json) tárolódnak.", left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.60, 0.64, 0.72, 1.0), false, false);
+
+        // Action button "Mentés és Bezárás"
+        let is_act_hov = self.hovered_modal_btn == Some(ModalButton::Action);
+        let act_bg = if is_act_hov { (0.04, 0.52, 1.0, 1.0) } else { (0.04, 0.52, 1.0, 0.90) };
+        d2d.fill_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, act_bg);
+        d2d.draw_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, (1.0, 1.0, 1.0, 0.35), 1.0);
+        d2d.draw_text_simple("Mentés és Bezárás", act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
     }
 
     fn render_about_modal(&self, d2d: &D2DContext) {
@@ -1531,18 +1741,55 @@ pub unsafe extern "system" fn overlay_wndproc(
             let mx = (lparam.0 & 0xFFFF) as i16 as f32;
             let my = ((lparam.0 >> 16) & 0xFFFF) as i16 as f32;
 
-            // Handle active in-app modal (Help / About)
+            // Handle active in-app modal (Help / About / Settings)
             if state.active_modal != ActiveModal::None {
                 if let Some((card, close, act)) = state.get_modal_layout() {
-                    // Click on close button (✕) or action button ("Rendben" / "Bezárás")
-                    if (mx >= close.0 && mx <= close.2 && my >= close.1 && my <= close.3)
-                        || (mx >= act.0 && mx <= act.2 && my >= act.1 && my <= act.3)
-                    {
+                    // Click on close button (✕)
+                    if mx >= close.0 && mx <= close.2 && my >= close.1 && my <= close.3 {
                         state.active_modal = ActiveModal::None;
                         state.hovered_modal_btn = None;
                         state.render();
                         return LRESULT(0);
                     }
+
+                    // Click on action button ("Rendben" / "Bezárás" / "Mentés és Bezárás")
+                    if mx >= act.0 && mx <= act.2 && my >= act.1 && my <= act.3 {
+                        if state.active_modal == ActiveModal::Settings {
+                            crate::settings::save_settings(&state.temp_settings);
+                            state.show_toast("✓ Beállítások elmentve");
+                        }
+                        state.active_modal = ActiveModal::None;
+                        state.hovered_modal_btn = None;
+                        state.render();
+                        return LRESULT(0);
+                    }
+
+                    // Settings modal controls
+                    if state.active_modal == ActiveModal::Settings {
+                        if let Some((hk_rects, auto_r, upd_r)) = state.get_settings_controls() {
+                            let clicked_opt = hk_rects.iter()
+                                .find(|(_, r)| mx >= r.0 && mx <= r.2 && my >= r.1 && my <= r.3)
+                                .map(|(opt, _)| opt.clone());
+                            if let Some(opt) = clicked_opt {
+                                state.temp_settings.global_hotkey = opt;
+                                state.render();
+                                return LRESULT(0);
+                            }
+
+                            if mx >= auto_r.0 && mx <= auto_r.2 && my >= auto_r.1 && my <= auto_r.3 {
+                                state.temp_settings.autostart = !state.temp_settings.autostart;
+                                state.render();
+                                return LRESULT(0);
+                            }
+
+                            if mx >= upd_r.0 && mx <= upd_r.2 && my >= upd_r.1 && my <= upd_r.3 {
+                                state.temp_settings.check_updates = !state.temp_settings.check_updates;
+                                state.render();
+                                return LRESULT(0);
+                            }
+                        }
+                    }
+
                     // Click inside card (consume)
                     if mx >= card.0 && mx <= card.2 && my >= card.1 && my <= card.3 {
                         return LRESULT(0);
@@ -1634,6 +1881,8 @@ pub unsafe extern "system" fn overlay_wndproc(
                     } else {
                         state.toolbar.active_tool = mode;
                     }
+                    state.base_tool = state.toolbar.active_tool;
+                    state.active_spring_tool = None;
                     state.snip_rect = None;
                     state.curve_phase = CurvePhase::Idle;
                     state.toolbar.dismiss_popup();
@@ -1694,6 +1943,8 @@ pub unsafe extern "system" fn overlay_wndproc(
                 HitTestResult::Item(ToolbarItem::SnipButton) => {
                     state.commit_text_if_any();
                     state.toolbar.active_tool = ToolMode::Snip;
+                    state.base_tool = ToolMode::Snip;
+                    state.active_spring_tool = None;
                     state.snip_rect = None;
                     state.curve_phase = CurvePhase::Idle;
                     state.toolbar.dismiss_popup();
@@ -1721,6 +1972,13 @@ pub unsafe extern "system" fn overlay_wndproc(
                         PopupAction::Help => {
                             state.toolbar.dismiss_popup();
                             state.active_modal = ActiveModal::Help;
+                            state.hovered_modal_btn = None;
+                            state.render();
+                        }
+                        PopupAction::Settings => {
+                            state.toolbar.dismiss_popup();
+                            state.temp_settings = crate::settings::load_settings();
+                            state.active_modal = ActiveModal::Settings;
                             state.hovered_modal_btn = None;
                             state.render();
                         }
@@ -1972,6 +2230,15 @@ pub unsafe extern "system" fn overlay_wndproc(
                     _ => {}
                 }
 
+                if state.active_spring_tool.is_some() {
+                    let ctrl_down = (GetKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
+                    let shift_down = (GetKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0;
+                    if state.held_key_down.is_none() && !ctrl_down && !shift_down {
+                        state.toolbar.active_tool = state.base_tool;
+                        state.active_spring_tool = None;
+                    }
+                }
+
                 state.render();
             }
 
@@ -2013,6 +2280,9 @@ pub unsafe extern "system" fn overlay_wndproc(
         WM_KEYDOWN => {
             let key = wparam.0 as u32;
             let ctrl_down = (GetKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
+            let shift_down = (GetKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0;
+            let alt_down = (GetKeyState(VK_MENU.0 as i32) as u16 & 0x8000) != 0;
+            let is_repeat = (lparam.0 & (1 << 30)) != 0;
 
             if key == VK_ESCAPE.0 as u32 {
                 handle_escape_press(state);
@@ -2030,6 +2300,26 @@ pub unsafe extern "system" fn overlay_wndproc(
                 return LRESULT(0);
             }
 
+            // Enter key saves in Settings modal
+            if state.active_modal == ActiveModal::Settings && key == 0x0D /* VK_RETURN */ {
+                crate::settings::save_settings(&state.temp_settings);
+                state.show_toast("✓ Beállítások elmentve");
+                state.active_modal = ActiveModal::None;
+                state.hovered_modal_btn = None;
+                state.render();
+                return LRESULT(0);
+            }
+
+            // If any modal is active, suppress tool switching shortcuts
+            if state.active_modal != ActiveModal::None {
+                return LRESULT(0);
+            }
+
+            // If user is currently typing in text box, don't intercept typing letters
+            if state.text_pos.is_some() {
+                return LRESULT(0);
+            }
+
             if key == VK_DELETE.0 as u32 {
                 state.history.clear();
                 state.history.reset_counter();
@@ -2042,20 +2332,32 @@ pub unsafe extern "system" fn overlay_wndproc(
                 return LRESULT(0);
             }
 
+            // Ctrl combinations (Undo, Redo, Copy, Save)
             if ctrl_down {
                 if key == 'Z' as u32 {
+                    state.ctrl_used_for_shortcut = true;
                     state.history.undo();
                     state.show_toast("↶ Visszavonás");
+                    if state.active_spring_tool == Some(ToolMode::Arrow) || state.active_spring_tool == Some(ToolMode::NumberedBadge) {
+                        state.toolbar.active_tool = state.base_tool;
+                        state.active_spring_tool = None;
+                    }
                     state.render();
                     return LRESULT(0);
                 }
                 if key == 'Y' as u32 {
+                    state.ctrl_used_for_shortcut = true;
                     state.history.redo();
                     state.show_toast("↷ Újra");
+                    if state.active_spring_tool == Some(ToolMode::Arrow) || state.active_spring_tool == Some(ToolMode::NumberedBadge) {
+                        state.toolbar.active_tool = state.base_tool;
+                        state.active_spring_tool = None;
+                    }
                     state.render();
                     return LRESULT(0);
                 }
                 if key == 'C' as u32 {
+                    state.ctrl_used_for_shortcut = true;
                     if let Some(r) = state.snip_rect {
                         let full_bgra = state.capture_rendered_canvas();
                         let cropped = crop_bgra(
@@ -2073,12 +2375,185 @@ pub unsafe extern "system" fn overlay_wndproc(
                     } else {
                         state.export_display_action(0, "clipboard");
                     }
+                    if state.active_spring_tool == Some(ToolMode::Arrow) || state.active_spring_tool == Some(ToolMode::NumberedBadge) {
+                        state.toolbar.active_tool = state.base_tool;
+                        state.active_spring_tool = None;
+                    }
                     return LRESULT(0);
                 }
                 if key == 'S' as u32 {
+                    state.ctrl_used_for_shortcut = true;
                     state.export_display_action(0, "png");
+                    if state.active_spring_tool == Some(ToolMode::Arrow) || state.active_spring_tool == Some(ToolMode::NumberedBadge) {
+                        state.toolbar.active_tool = state.base_tool;
+                        state.active_spring_tool = None;
+                    }
                     return LRESULT(0);
                 }
+            }
+
+            // Spring-Loaded Modifier Keys:
+            // Shift = Line
+            // Ctrl = Arrow
+            // Ctrl + Shift = Numbered Badge
+            if key == VK_CONTROL.0 as u32 {
+                if !is_repeat {
+                    state.ctrl_used_for_shortcut = false;
+                    let target = if shift_down {
+                        ToolMode::NumberedBadge
+                    } else {
+                        ToolMode::Arrow
+                    };
+                    if state.active_spring_tool != Some(target) {
+                        state.active_spring_tool = Some(target);
+                        state.toolbar.active_tool = target;
+                        state.render();
+                    }
+                }
+                return LRESULT(0);
+            }
+
+            if key == VK_SHIFT.0 as u32 {
+                if !is_repeat {
+                    let target = if ctrl_down {
+                        ToolMode::NumberedBadge
+                    } else {
+                        ToolMode::Line
+                    };
+                    if state.active_spring_tool != Some(target) {
+                        state.active_spring_tool = Some(target);
+                        state.toolbar.active_tool = target;
+                        state.render();
+                    }
+                }
+                return LRESULT(0);
+            }
+
+            // In-app Tool Shortcuts (Hybrid: Hold to spring-switch / Tap to lock)
+            if !ctrl_down && !alt_down {
+                // Pipette is one-shot interactive tool
+                if key == 'I' as u32 {
+                    if !is_repeat {
+                        state.previous_tool_before_pipette = if state.toolbar.active_tool != ToolMode::Pipette {
+                            state.toolbar.active_tool
+                        } else {
+                            state.base_tool
+                        };
+                        state.toolbar.dismiss_popup();
+                        state.pipette_buffer = Some(state.capture_rendered_canvas());
+                        state.toolbar.active_tool = ToolMode::Pipette;
+                        state.show_toast("💧 Pipetta: Kattints a szín mintavételezéséhez! (Esc: mégse)");
+                        state.render();
+                    }
+                    return LRESULT(0);
+                }
+
+                let letter_tool = match key {
+                    0x58 /* X */ => Some(ToolMode::Blur),
+                    0x52 /* R */ => Some(ToolMode::Rectangle),
+                    0x43 /* C */ => Some(ToolMode::Circle),
+                    0x54 /* T */ => Some(ToolMode::Text),
+                    0x53 /* S */ => Some(ToolMode::Snip),
+                    0x50 /* P */ => Some(ToolMode::Freehand),
+                    0x4C /* L */ => Some(ToolMode::Line),
+                    0x41 /* A */ => Some(ToolMode::Arrow),
+                    0x4E /* N */ => Some(ToolMode::NumberedBadge),
+                    _ => None,
+                };
+
+                if let Some(tool) = letter_tool {
+                    if !is_repeat {
+                        state.held_key_down = Some((key, std::time::Instant::now()));
+                        state.active_spring_tool = Some(tool);
+                        state.toolbar.active_tool = tool;
+                        state.render();
+                    }
+                    return LRESULT(0);
+                }
+            }
+
+            LRESULT(0)
+        }
+
+        WM_KEYUP => {
+            let key = wparam.0 as u32;
+
+            if state.text_pos.is_some() {
+                return LRESULT(0);
+            }
+
+            // Check hybrid letter keys release
+            if let Some((held_k, press_time)) = state.held_key_down {
+                if held_k == key {
+                    state.held_key_down = None;
+                    let duration = press_time.elapsed();
+                    let mapped_tool = match key {
+                        0x58 /* X */ => Some(ToolMode::Blur),
+                        0x52 /* R */ => Some(ToolMode::Rectangle),
+                        0x43 /* C */ => Some(ToolMode::Circle),
+                        0x54 /* T */ => Some(ToolMode::Text),
+                        0x53 /* S */ => Some(ToolMode::Snip),
+                        0x50 /* P */ => Some(ToolMode::Freehand),
+                        0x4C /* L */ => Some(ToolMode::Line),
+                        0x41 /* A */ => Some(ToolMode::Arrow),
+                        0x4E /* N */ => Some(ToolMode::NumberedBadge),
+                        _ => None,
+                    };
+
+                    if let Some(tool) = mapped_tool {
+                        if duration.as_millis() < 280 && !state.is_drawing {
+                            // Quick TAP: Permanently switch tool!
+                            state.base_tool = tool;
+                            state.toolbar.active_tool = tool;
+                            state.active_spring_tool = None;
+                            state.show_toast(&format!("✓ {}", tool.label_hu()));
+                            state.render();
+                        } else {
+                            // HOLD: Spring-loaded release
+                            if !state.is_drawing {
+                                state.toolbar.active_tool = state.base_tool;
+                                state.active_spring_tool = None;
+                                state.render();
+                            }
+                        }
+                    }
+                    return LRESULT(0);
+                }
+            }
+
+            // Check modifier keys release
+            let ctrl_down = (GetKeyState(VK_CONTROL.0 as i32) as u16 & 0x8000) != 0;
+            let shift_down = (GetKeyState(VK_SHIFT.0 as i32) as u16 & 0x8000) != 0;
+
+            if key == VK_CONTROL.0 as u32 || key == VK_SHIFT.0 as u32 {
+                if !ctrl_down && !shift_down {
+                    if let Some(st) = state.active_spring_tool {
+                        if matches!(st, ToolMode::Line | ToolMode::Arrow | ToolMode::NumberedBadge) {
+                            if !state.is_drawing {
+                                state.toolbar.active_tool = state.base_tool;
+                                state.active_spring_tool = None;
+                                state.render();
+                            }
+                        }
+                    }
+                } else if ctrl_down && !shift_down {
+                    if state.active_spring_tool == Some(ToolMode::NumberedBadge) {
+                        if !state.is_drawing {
+                            state.active_spring_tool = Some(ToolMode::Arrow);
+                            state.toolbar.active_tool = ToolMode::Arrow;
+                            state.render();
+                        }
+                    }
+                } else if !ctrl_down && shift_down {
+                    if state.active_spring_tool == Some(ToolMode::NumberedBadge) {
+                        if !state.is_drawing {
+                            state.active_spring_tool = Some(ToolMode::Line);
+                            state.toolbar.active_tool = ToolMode::Line;
+                            state.render();
+                        }
+                    }
+                }
+                return LRESULT(0);
             }
 
             LRESULT(0)
@@ -2234,6 +2709,9 @@ pub fn show_overlay(hwnd: HWND) {
             state.toolbar.dismiss_popup();
             state.active_modal = ActiveModal::None;
             state.hovered_modal_btn = None;
+            state.active_spring_tool = None;
+            state.held_key_down = None;
+            state.ctrl_used_for_shortcut = false;
 
             if let Some(update) = crate::updater::get_available_update() {
                 state.show_toast(&format!("Új DrawIt verzió érhető el: {} (Logo menü)", update.tag));
@@ -2257,10 +2735,19 @@ pub fn show_overlay(hwnd: HWND) {
 }
 
 pub fn hide_overlay(state: &mut OverlayState) {
+    // Persist last used thickness and color into settings
+    let mut curr_settings = crate::settings::load_settings();
+    curr_settings.last_thickness = state.toolbar.thickness;
+    curr_settings.last_color = state.toolbar.color;
+    crate::settings::save_settings(&curr_settings);
+
     unsafe {
         let _ = UnregisterHotKey(state.hwnd, 9998);
         state.active_modal = ActiveModal::None;
         state.hovered_modal_btn = None;
+        state.active_spring_tool = None;
+        state.held_key_down = None;
+        state.ctrl_used_for_shortcut = false;
         state.toolbar.dismiss_popup();
         state.commit_text_if_any();
         state.history.clear();

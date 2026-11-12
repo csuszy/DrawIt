@@ -62,6 +62,7 @@ pub enum CanvasMode {
 pub enum ActiveModal {
     None,
     Help,
+    Settings,
     About,
 }
 

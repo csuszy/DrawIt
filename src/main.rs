@@ -5,6 +5,7 @@ mod models;
 mod overlay;
 mod pdf;
 mod screen;
+mod settings;
 mod toolbar;
 mod tray;
 mod updater;
@@ -41,12 +42,15 @@ fn main() {
 
         // 3b. Cleanup any previous update artifacts and start background update check
         updater::cleanup_old_exe();
-        std::thread::spawn(|| {
-            std::thread::sleep(std::time::Duration::from_secs(3));
-            if let Ok(Some(info)) = updater::check_for_update() {
-                updater::set_available_update(Some(info));
-            }
-        });
+        let app_settings = settings::load_settings();
+        if app_settings.check_updates {
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                if let Ok(Some(info)) = updater::check_for_update() {
+                    updater::set_available_update(Some(info));
+                }
+            });
+        }
 
         // 4. Create Fullscreen Overlay Window spanning all displays
         let overlay_hwnd = match overlay::create_overlay_window() {

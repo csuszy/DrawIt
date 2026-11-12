@@ -1,76 +1,169 @@
 # DrawIt – Gyors és Hordozható Képernyőrajzoló
 
-A **DrawIt** egy villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző alkalmazás Windows 10 és 11 rendszerekre. 
-
-Teljesen natív **Rust** nyelven készült, hardveres Direct2D gyorsítással:
-* **Nem igényel .NET keretrendszert**, semmilyen külső függőséget vagy futtatókörnyezetet.
-* **Nem kér rendszergazdai jogosultságot** (`asInvoker`), pendrive-ról vagy bármilyen mappából azonnal futtatható.
-* **Azonnali indulás**: elhanyagolható memóriahasználat (~15-25 MB) és mindössze ~3-4 MB-os fájlméret a korábbi 76 MB helyett.
-
----
-
-## Letöltés és futtatás
-
-* [**`DrawIt.exe`**](file:///C:/Users/bcsas/Desktop/DrawIt/DrawIt.exe) — Egyetlen önálló, hordozható futtatható fájl. Bárhová átmásolható és közvetlenül indítható.
-* [**`Standalone_Files\DrawIt.exe`**](file:///C:/Users/bcsas/Desktop/DrawIt/Standalone_Files/DrawIt.exe) — Külön mappába rendezett változat.
-* [**`Standalone_Files.zip`**](file:///C:/Users/bcsas/Desktop/DrawIt/Standalone_Files.zip) — Tömörített archívum egyszerű átküldéshez és megosztáshoz.
-
-Indítás után a program a tálca értesítési területén fut a háttérben. A rajzolást a **`Ctrl + 2`** billentyűkombinációval vagy a tálcaikonra kattintva indíthatja el.
+<p align="center">
+  <img src="img/DrawIt_logo.svg" width="130" height="130" alt="DrawIt Logo" />
+  <br>
+  <strong>DrawIt v0.2</strong>
+  <br>
+  <em>Villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző segédprogram Windows 10 és 11 rendszerekre</em>
+</p>
 
 ---
 
-## Funkciók és kezelés
+## Áttekintés
+
+A **DrawIt** egyetlen önálló, rendkívül gyors és hardveresen gyorsított képernyőrajzoló eszköz. Kifejezetten oktatóknak, fejlesztőknek, bemutatót tartó előadóknak és mindennapi munkához készült, ahol fontos a képernyő azonnali feliratozása, magyarázata és a képernyőképek gyors exportálása.
+
+Teljesen natív **Rust** nyelven készült, közvetlen **Direct2D** és **DirectWrite** grafikus gyorsítással:
+* **Nulla külső függőség**: Nem igényel .NET keretrendszert, Visual C++ Redistributable csomagokat, sem más futtatókörnyezetet.
+* **100% Hordozható (Portable)**: Nem igényel telepítést, nem szemetel a rendszerleíró adatbázisban, közvetlenül pendrive-ról vagy bármilyen mappából futtatható.
+* **Beépített automatikus frissítéskezelő**: A szoftver a háttérben közvetlenül ellenőrzi a legújabb GitHub Releases kiadásokat. Új verzió esetén egyetlen kattintással letölti és automatikusan helyben frissíti magát.
+* **Jobb egérgombos gyors elvetés és kilépés**: Bármely megnyitott menü, pipetta, rajzolás vagy maga a rajzvászon egyetlen jobb egérkattintással azonnal bezárható.
+* **Nem kér rendszergazdai jogot**: Standard felhasználói jogosultságokkal (`asInvoker`) azonnal elindul.
+* **Minimális erőforrásigény**: Fájlmérete mindössze **~740 KB**, memóriahasználata elenyésző (~15-25 MB), és mikromásodperces késleltetéssel reagál.
+
+---
+
+## Képernyőképek és Funkciók
 
 ### 1. Lebegő vezérlősáv (Dokk)
-* **Mozgatás**: A bal szélső 6 pontos fogantyúnál (`⋮⋮`) megfogva a dokk bárhová áthúzható. A menük melletti véletlen kattintások nem mozdítják el a vezérlősávot.
-* **Logó menü**: A DrawIt logóra kattintva érhető el a gyorsbillentyű-súgó (`F1`), a számláló nullázása, a névjegy és a kilépés.
-* **Aktív eszköz felirat**: Amikor kiválaszt egy rajzeszközt, a gomb kinyílik és megjeleníti a nevét (pl. `— Vonal`, `T Szöveg`, `▭ Téglalap`, `⌒ Ív`, `💧 Homály`). Az inaktív eszközök kis méretű ikonok maradnak, hogy ne takarják a munkaterületet.
+![Lebegő vezérlősáv](img/drawit-toolbar.png)
 
-### 2. Rajzeszközök
-* **Rajz (`✎`)**: Szabadkézi toll simított vonalakkal.
-* **Vonal (`—`)**: Egyenes vonalak húzása.
-* **Téglalap (`▭`)** és **Kör (`⚪`)**: Területek és képernyőelemek keretezése, kiemelése.
-* **Nyíl (`➔`)**: Folyamatok és figyelemfelhívó nyilak húzása.
-* **Számozás (`①`)**: Sorszámozott körjelvény (1, 2, 3...). A rajzolófelület megnyitásakor vagy törléskor a számláló mindig automatikusan elölről (1-től) indul.
-* **Ív (`⌒`)**: Görbék rajzolása: húzzon egy egyenes vonalat, engedje fel az egeret, majd a kurzor mozgatásával hajlítsa meg a kívánt ívre, és kattintson a rögzítéshez.
-* **Szöveg (`T`)**: Kattintson a képernyő bármely pontjára, és gépeljen közvetlenül. Az Enter billentyűvel lezárhatja a szöveget.
-* **Homályosítás (`💧`)**: Húzzon egy dobozt a képernyő bármely részére a bizalmas adatok (jelszavak, személyes adatok) azonnali, diszkrét elfedéséhez.
-
-### 3. Színek és ecsetméret
-* **Színválasztó (`● 4px ▾`)**: 9 gyorsszín, valamint a **`🎨 Egyedi szín...`** gomb, amellyel tetszőleges szín választható ki a Windows színpalettáján. A szín kiválasztása után a menü nyitva marad, így azonnal állítható a vastagság vagy átlátszatlanság is.
-* **Ctrl + Egérgörgő (vagy görgő)**: A vonalvastagság (és a szöveg betűméret) azonnali fokozatmentes növelése vagy csökkentése (1 px – 32 px) a képernyő bármely pontján.
-* **Átlátszatlanság**: 25%, 50%, 75% és 100% beállítások kiemelőfilc hatáshoz.
-* **Vonalvastagság**: 2px, 4px, 8px, 12px gyorsgombok, valamint `−` és `+` finomállító gombok.
-
-### 4. Kijelző módok (`Kijelző ▾`)
-* **Átlátszó**: Rajzolás az élő asztalra és megnyitott ablakokra.
-* **Homályosított**: Elegáns, homályosított háttér, amely kiemeli a feliratokat és rajzokat.
-* **Fehér tábla**: Tiszta fehér digitális jegyzettábla.
-* **Fekete tábla**: Sötét digitális jegyzettábla.
-
-### 5. Többmonitoros intelligencia és Értesítések
-* **Fókuszált monitor központosítás**: A lebegő dokk, a képmetsző segédszövegei, a HUD értesítések, valamint az összes felugró ablak (Súgó, Névjegy, Színválasztó, Fájlmentés) mindig automatikusan azon a monitoron és annak közepén jelennek meg, amelyiken éppen az egérrel dolgozik — így két monitor esetén sem csúszik át a kép a monitorok közötti kávára.
-* **Tiszta munkalap újranyitáskor**: A felület bezárása (vagy Esc megnyomása) után az újbóli megnyitáskor a korábbi rajzok automatikusan törlődnek, a számozás pedig mindig 1-től indul újra.
-* **Lebegő HUD értesítések**: Minden kulcsfontosságú műveletről (másolás vágólapra, mentés, méretváltoztatás, visszavonás) elegáns visszajelzés jelenik meg az aktív képernyő alsó közepén.
-
-### 6. Kivágás és Többmonitoros mentés
-* **`✂️ Kivágás`**: Képernyőrészlet kijelölése. A kijelölt terület alatt megjelenő gyorsgombsorral a kép azonnal a vágólapra másolható, vagy elmenthető PNG és PDF formátumban.
-* **`💾 Kijelző mentése ▾`**: Többmonitoros támogatás:
-  * A lenyíló listában külön sorban szerepel minden csatlakoztatott kijelző (pl. *1. Kijelző [Főképernyő] (1920×1080)*, *2. Kijelző (1920×1080)*), valamint a *Teljes asztal*.
-  * Különálló gombokkal (`PNG`, `PDF`, `Másolás`) egyetlen kattintással elmenthető vagy vágólapra tehető a kiválasztott monitor képe.
+* **Szabadon áthelyezhető**: A bal szélső fogantyúnál (`⋮⋮`) megfogva a képernyő bármely részére húzható.
+* **Dinamikus eszközkijelzés**: A kiválasztott rajzeszköz gombja elegánsan kinyílik, és felirattal jeleníti meg a nevét, míg az inaktív ikonok kompaktak maradnak.
+* **100% Vektoros grafika**: Minden egyes ikon és a logó is hardveresen gyorsított Direct2D vektoros geometriával rajzolódik ki, így 100%, 125%, 150% és 200% DPI-skálázás mellett is tökéletesen éles.
 
 ---
 
-## Gyorsbillentyűk
+### 2. Színválasztó, Spektrum és Pipetta
+![Színválasztó és Pipetta](img/drawit-colors.png)
 
-| Billentyű | Művelet |
+* **18 beépített gyorsszín**: Standard és dizájner pasztell árnyalatok azonnali kiválasztása.
+* **Egyedi színskála (Hue & Lightness)**: Finomhangolható színkeverő élő HEX színkód kijelzéssel.
+* **Képernyő-Pipetta**: Színmintavételezés a képernyő bármely pontjáról 7×-es nagyítóval és célkereszttel.
+* **Átlátszatlanság és Vonalvastagság**: 25%, 50%, 75%, 100% opacitás és 2px–12px gyorsméretek, valamint `−` / `+` finombeállítás.
+
+---
+
+### 3. Képernyőkivágás és Mentés
+![Képernyőkivágás](img/drawit-crop.png)
+
+* **Rugalmas területkijelölés**: Tetszőleges képernyőrészlet kijelölése.
+* **Azonnali gombsor**:
+  * **PNG mentés**: Veszteségmentes képfájlba mentés.
+  * **PDF mentés**: Vektoros PDF dokumentum generálása a kijelölt területről.
+  * **Másolás**: Azonnali vágólapra helyezés más alkalmazásokba (Teams, Slack, Word, böngésző) való közvetlen beillesztéshez (`Ctrl + V`).
+
+---
+
+### 4. Digitális Vászon Módok
+![Vászon módok](img/drawit-background.png)
+
+A `Kijelző ▾` menüből négyféle munkakörnyezet választható:
+* **Átlátszó**: Élő asztal és alkalmazások annotálása.
+* **Elmosás (Blur)**: Az asztal hátterének elegáns elhomályosítása, hogy a magyarázatok kiemelkedjenek.
+* **Fehértábla**: Klasszikus fehér prezentációs tábla.
+* **Feketetábla**: Modern sötét jegyzettábla.
+
+---
+
+### 5. Többmonitoros Export
+![Kijelző mentése](img/drawit-export.png)
+
+* Külön-külön kiválasztható bármely csatlakoztatott monitor vagy a teljes virtuális asztal.
+* Egyetlen kattintással menthető PNG vagy PDF formátumban, illetve másolható vágólapra.
+
+---
+
+## Gyorsbillentyűk és Rugós Eszközök (Hold-to-Switch)
+
+A DrawIt professzionális rugós vezérlést támogat: nyomva tartás alatt ideiglenesen átvált az eszközre, elengedéskor pedig azonnal visszaugrik a korábbi eszközre.
+
+### Rugós módosító billentyűk (Nyomva tartva)
+| Billentyű | Ideiglenes eszköz | Működés |
+| :--- | :--- | :--- |
+| **`Shift`** | **Egyenes vonal (Line)** | Nyomva tartva egyenes vonalat húz, felengedve visszatér az előző eszközre |
+| **`Ctrl`** | **Folyamatnyíl (Arrow)** | Nyomva tartva nyilat rajzol, felengedve visszatér az előző eszközre |
+| **`Ctrl + Shift`** | **Számozott nyíl (Numbered Badge)** | Nyomva tartva automatikusan számozott nyilat rajzol (1, 2, 3...) |
+
+### Hibrid rajzeszköz billentyűk (Gyors lenyomás = Váltás \| Nyomva tartás = Rugós ideiglenes rajz)
+| Billentyű | Eszköz | Leírás |
+| :--- | :--- | :--- |
+| **`X`** | **Elmosás (Blur)** | Gyors kitakarás vagy végleges elmosás eszköz |
+| **`R`** | **Téglalap (Rectangle)** | Körvonalas területkijelölés |
+| **`C`** | **Kör (Circle)** | Kör / ellipszis rajzolása |
+| **`T`** | **Szöveg (Text)** | Közvetlen szövegbevitel a vászonra |
+| **`S`** | **Kivágás (Snip)** | Képernyőrészlet kijelölése és exportálása |
+| **`I`** | **Pipetta (Pipette)** | Szín mintavételezés a képernyőről |
+| **`P`** | **Ceruza / Toll (Pen)** | Szabadkézi toll |
+| **`L`** | **Vonal (Line)** | Egyenes vonal rajzolása |
+| **`A`** | **Nyíl (Arrow)** | Iránymutató nyíl |
+| **`N`** | **Számozott nyíl** | Lépésről-lépésre számozás |
+
+### Általános és Rendszer gyorsbillentyűk
+| Billentyűkombináció | Funkció |
 | :--- | :--- |
-| **Ctrl + 2** *(vagy Ctrl + Alt + D)* | Rajzolófelület be- és kikapcsolása bárhonnan a rendszerből |
-| **Ctrl + Egérgörgő** *(vagy görgő)* | Vonalvastagság / Szövegméret azonnali növelése és csökkentése |
-| **Esc** *(vagy Jobb egérgomb)* | Kilépés a rajzolásból / Menük bezárása / Kijelölés megszüntetése |
-| **Ctrl + Z** | Visszavonás |
-| **Ctrl + Y** | Újra |
-| **Delete** | Rajzvászon azonnali törlése és számláló újraindítása 1-ről |
-| **Ctrl + C** | Kijelölt terület (vagy aktuális képernyő) másolása vágólapra |
-| **Ctrl + S** | Képernyőkép mentése PNG fájlba |
-| **F1** | Súgó és billentyűk ablak megnyitása a fókusz monitoron |
+| **`Ctrl + 2`** *(vagy `F8`, `Ctrl + Alt + D`, `Win + Alt + D`)* | Rajzolófelület be- és kikapcsolása bárhonnan a rendszerből (testreszabható) |
+| **`Ctrl + Egérgörgő`** *(vagy görgő)* | Vonalvastagság / Szövegméret azonnali fokozatmentes állítása (1–32 px) |
+| **`Esc`** *(vagy Jobb egérgomb)* | Rajzolás bezárása / Menük elvetése / Kijelölés törlése |
+| **`Ctrl + Z`** | Visszavonás (Undo) |
+| **`Ctrl + Y`** | Újra (Redo) |
+| **`Delete`** | Rajzvászon letörlése és számláló újraindítása 1-ről |
+| **`Ctrl + C`** | Kijelölt terület másolása a vágólapra |
+| **`Ctrl + S`** | Aktuális képernyőkép mentése PNG fájlba |
+| **`F1`** | Gyorsbillentyű-súgó megjelenítése |
+
+---
+
+## Beállítások és Hordozhatóság
+
+A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető a **Beállítások** ablak:
+* **Globális indítóbillentyű testreszabása**: `Ctrl+2`, `F8`, `Ctrl+Alt+D`, vagy `Win+Alt+D`.
+* **Windows indítás (Autostart)**: Beállítható, hogy a Windows indításakor azonnal fusson a tálcán a háttérben.
+* **Automatikus frissítéskeresés**: Ki- és bekapcsolható az indításkori GitHub Releases verzióellenőrzés.
+* **Hordozható konfiguráció**: A beállítások automatikusan a `DrawIt.json` fájlban tárolódnak, így pendrive-ról futtatva is megőrzi a preferenciákat.
+
+---
+
+## Telepítés és Futtatás
+
+### Közvetlen futtatás
+1. Töltse le a legújabb verziót a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalról (`DrawIt.exe` vagy `Standalone_Files.zip`).
+2. Indítsa el a **`DrawIt.exe`** programot.
+3. A szoftver a tálca értesítési területén fut a háttérben. A **`Ctrl + 2`** billentyűkombinációval bármikor előhívható.
+4. Frissítések: a DrawIt automatikusan jelzi az új verziókat, de a menüből a *„Frissítések keresése...”* opcióval bármikor manuálisan is ellenőrizhető.
+
+> [!NOTE]
+> **Windows SmartScreen figyelmeztetés:**
+> Digitális tanúsítvánnyal még nem aláírt új önálló futtatható fájlok esetén a Windows megjelenítheti a kék védelmi ablakot. Kattintson a **További információ** gombra, majd a **Futtatás mindenképp** lehetőségre.
+> <br><br>
+> <img src="img/smartscreen-warning.png" width="360" alt="SmartScreen figyelmeztetés" />
+> &nbsp;&nbsp;&nbsp;
+> <img src="img/smartscreen-details.png" width="360" alt="SmartScreen részletek" />
+
+---
+
+## Fordítás forrásból
+
+A projekt szabványos Rust eszköztárral építhető:
+
+```powershell
+# Követelmény: Rust 1.75+ (MSVC toolchain Windows 10/11-en)
+git clone https://github.com/csuszy/DrawIt.git
+cd DrawIt
+
+# Debug build
+cargo build
+
+# Optimalizált, minimális méretű release build (~740 KB)
+cargo build --release
+```
+
+A kész bináris a `target/release/drawit.exe` útvonalon jön létre.
+
+---
+
+## Licenc
+
+Ez a szoftver személyes és üzleti célokra szabadon használható és terjeszthető.
+Minden jog fenntartva © 2026 DrawIt Team.

@@ -6,3 +6,7 @@
 *.pdb
 *.tmp
 .system_generated/
+
+# User settings
+DrawIt.json
+settings.json

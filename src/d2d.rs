@@ -606,6 +606,20 @@ impl D2DContext {
         self.draw_line(cx - 1.2, cy + 2.8, cx + 1.2, cy + 2.8, color, stroke_width * 0.9);
     }
 
+    pub fn draw_gear_icon(&self, cx: f32, cy: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
+        self.draw_ellipse(cx, cy, 3.2, 3.2, color, stroke_width);
+        for i in 0..6 {
+            let angle = (i as f32) * std::f32::consts::PI / 3.0;
+            let cos_a = angle.cos();
+            let sin_a = angle.sin();
+            let x1 = cx + cos_a * 4.0;
+            let y1 = cy + sin_a * 4.0;
+            let x2 = cx + cos_a * 6.5;
+            let y2 = cy + sin_a * 6.5;
+            self.draw_line(x1, y1, x2, y2, color, stroke_width * 1.2);
+        }
+    }
+
     pub fn draw_exit_icon(&self, cx: f32, cy: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
         // Door frame
         self.draw_line(cx + 1.0, cy - 5.5, cx - 4.5, cy - 5.5, color, stroke_width);

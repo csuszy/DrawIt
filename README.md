@@ -3,7 +3,7 @@
 <p align="center">
   <img src="img/DrawIt_logo.svg" width="130" height="130" alt="DrawIt Logo" />
   <br>
-  <strong>DrawIt v0.1.1</strong>
+  <strong>DrawIt v0.2</strong>
   <br>
   <em>Villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző segédprogram Windows 10 és 11 rendszerekre</em>
 </p>
@@ -75,12 +75,36 @@ A `Kijelző ▾` menüből négyféle munkakörnyezet választható:
 
 ---
 
-## Gyorsbillentyűk
+## Gyorsbillentyűk és Rugós Eszközök (Hold-to-Switch)
 
+A DrawIt professzionális rugós vezérlést támogat: nyomva tartás alatt ideiglenesen átvált az eszközre, elengedéskor pedig azonnal visszaugrik a korábbi eszközre.
+
+### Rugós módosító billentyűk (Nyomva tartva)
+| Billentyű | Ideiglenes eszköz | Működés |
+| :--- | :--- | :--- |
+| **`Shift`** | **Egyenes vonal (Line)** | Nyomva tartva egyenes vonalat húz, felengedve visszatér az előző eszközre |
+| **`Ctrl`** | **Folyamatnyíl (Arrow)** | Nyomva tartva nyilat rajzol, felengedve visszatér az előző eszközre |
+| **`Ctrl + Shift`** | **Számozott nyíl (Numbered Badge)** | Nyomva tartva automatikusan számozott nyilat rajzol (1, 2, 3...) |
+
+### Hibrid rajzeszköz billentyűk (Gyors lenyomás = Váltás \| Nyomva tartás = Rugós ideiglenes rajz)
+| Billentyű | Eszköz | Leírás |
+| :--- | :--- | :--- |
+| **`X`** | **Elmosás (Blur)** | Gyors kitakarás vagy végleges elmosás eszköz |
+| **`R`** | **Téglalap (Rectangle)** | Körvonalas területkijelölés |
+| **`C`** | **Kör (Circle)** | Kör / ellipszis rajzolása |
+| **`T`** | **Szöveg (Text)** | Közvetlen szövegbevitel a vászonra |
+| **`S`** | **Kivágás (Snip)** | Képernyőrészlet kijelölése és exportálása |
+| **`I`** | **Pipetta (Pipette)** | Szín mintavételezés a képernyőről |
+| **`P`** | **Ceruza / Toll (Pen)** | Szabadkézi toll |
+| **`L`** | **Vonal (Line)** | Egyenes vonal rajzolása |
+| **`A`** | **Nyíl (Arrow)** | Iránymutató nyíl |
+| **`N`** | **Számozott nyíl** | Lépésről-lépésre számozás |
+
+### Általános és Rendszer gyorsbillentyűk
 | Billentyűkombináció | Funkció |
 | :--- | :--- |
-| **`Ctrl + 2`** *(vagy `Ctrl + Alt + D`)* | Rajzolófelület be- és kikapcsolása bárhonnan a rendszerből |
-| **`Ctrl + Egérgörgő`** *(vagy görgő)* | Vonalvastagság / Szövegméret azonnali fokozatmentes állítása |
+| **`Ctrl + 2`** *(vagy `F8`, `Ctrl + Alt + D`, `Win + Alt + D`)* | Rajzolófelület be- és kikapcsolása bárhonnan a rendszerből (testreszabható) |
+| **`Ctrl + Egérgörgő`** *(vagy görgő)* | Vonalvastagság / Szövegméret azonnali fokozatmentes állítása (1–32 px) |
 | **`Esc`** *(vagy Jobb egérgomb)* | Rajzolás bezárása / Menük elvetése / Kijelölés törlése |
 | **`Ctrl + Z`** | Visszavonás (Undo) |
 | **`Ctrl + Y`** | Újra (Redo) |
@@ -88,6 +112,16 @@ A `Kijelző ▾` menüből négyféle munkakörnyezet választható:
 | **`Ctrl + C`** | Kijelölt terület másolása a vágólapra |
 | **`Ctrl + S`** | Aktuális képernyőkép mentése PNG fájlba |
 | **`F1`** | Gyorsbillentyű-súgó megjelenítése |
+
+---
+
+## Beállítások és Hordozhatóság
+
+A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető a **Beállítások** ablak:
+* **Globális indítóbillentyű testreszabása**: `Ctrl+2`, `F8`, `Ctrl+Alt+D`, vagy `Win+Alt+D`.
+* **Windows indítás (Autostart)**: Beállítható, hogy a Windows indításakor azonnal fusson a tálcán a háttérben.
+* **Automatikus frissítéskeresés**: Ki- és bekapcsolható az indításkori GitHub Releases verzióellenőrzés.
+* **Hordozható konfiguráció**: A beállítások automatikusan a `DrawIt.json` fájlban tárolódnak, így pendrive-ról futtatva is megőrzi a preferenciákat.
 
 ---
 

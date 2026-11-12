@@ -21,6 +21,7 @@ pub enum ToolbarItem {
 pub enum PopupAction {
     // Logo menu
     Help,
+    Settings,
     CheckUpdates,
     About,
     ExitApp,
@@ -293,7 +294,7 @@ impl Toolbar {
             OpenPopup::LogoMenu => {
                 let (_, l_rect) = items.iter().find(|(it, _)| *it == ToolbarItem::LogoButton)?;
                 let pw = 220.0;
-                let ph = 176.0;
+                let ph = 216.0;
                 let px = l_rect.0.clamp(10.0, self.screen_width - pw - 10.0);
                 let py = self.y + self.height + 4.0;
 
@@ -302,6 +303,9 @@ impl Toolbar {
                 let mut ry = py + 8.0;
 
                 acts.push((PopupAction::Help, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
+                ry += row_h + 4.0;
+
+                acts.push((PopupAction::Settings, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
                 ry += row_h + 4.0;
 
                 acts.push((PopupAction::CheckUpdates, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
@@ -872,6 +876,7 @@ impl Toolbar {
 
                     let (label, is_danger) = match act {
                         PopupAction::Help => ("Súgó és billentyűk [F1]", false),
+                        PopupAction::Settings => ("Beállítások...", false),
                         PopupAction::CheckUpdates => ("Frissítések keresése...", false),
                         PopupAction::About => (concat!("Névjegy (DrawIt v", env!("CARGO_PKG_VERSION"), ")"), false),
                         PopupAction::ExitApp => ("Kilépés a rajzolóból", true),
@@ -882,6 +887,7 @@ impl Toolbar {
                     let icon_cy = (at + ab) / 2.0;
                     match act {
                         PopupAction::Help => d2d.draw_help_book_icon(icon_cx, icon_cy, col, 1.6),
+                        PopupAction::Settings => d2d.draw_gear_icon(icon_cx, icon_cy, col, 1.6),
                         PopupAction::CheckUpdates => d2d.draw_refresh_icon(icon_cx, icon_cy, col, 1.6),
                         PopupAction::About => d2d.draw_info_icon(icon_cx, icon_cy, col, 1.6),
                         PopupAction::ExitApp => d2d.draw_exit_icon(icon_cx, icon_cy, col, 1.6),
