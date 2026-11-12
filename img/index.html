@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#071329">
+  <meta name="description" content="DrawIT – gyors, modern, Rust-alapú képernyőrajzoló Windowsra. Rajzolj, jelölj, vágj ki és mentsd el, amit látsz.">
+  <title>DrawIT – Rajzolj a képernyődre</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071329;
+      --bg-deep: #030b1c;
+      --surface: #101d33;
+      --surface-2: #15243d;
+      --line: rgba(159, 181, 219, .15);
+      --text: #f5f8ff;
+      --muted: #a5b2c9;
+      --blue: #1688ff;
+      --cyan: #43c8f5;
+      --purple: #8a75ff;
+      --pink: #e45db5;
+      --green: #43d39a;
+      --radius: 20px;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .35);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(ellipse at 72% 4%, rgba(34, 110, 220, .19), transparent 34rem),
+        radial-gradient(ellipse at 12% 35%, rgba(104, 83, 255, .12), transparent 32rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    .container { width: min(1120px, calc(100% - 44px)); margin: 0 auto; }
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      border-bottom: 1px solid rgba(159,181,219,.1);
+      background: rgba(5, 15, 34, .78);
+      backdrop-filter: blur(18px);
+    }
+    .nav { height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; font-size: 18px; font-weight: 760; letter-spacing: -.5px; }
+    .brand img { width: 42px; height: 42px; object-fit: contain; border-radius: 11px; }
+    .nav-links { display: flex; align-items: center; gap: 27px; color: #c0cbe0; font-size: 13px; }
+    .nav-links a { text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: white; }
+    .nav-download {
+      padding: 10px 16px; border-radius: 11px; background: #167ef0;
+      color: white !important; font-weight: 700; box-shadow: 0 7px 24px rgba(22,136,255,.23);
+    }
+    .hero { padding: 82px 0 76px; overflow: hidden; }
+    .hero-grid { display: grid; grid-template-columns: .92fr 1.08fr; align-items: center; gap: 44px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 9px; padding: 8px 12px;
+      border: 1px solid rgba(104,164,255,.24); border-radius: 999px;
+      background: rgba(28,112,220,.1); color: #b8d8ff; font-size: 12px; font-weight: 650;
+      letter-spacing: .2px;
+    }
+    .eyebrow-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    h1 { margin: 22px 0 18px; max-width: 600px; font-size: clamp(46px, 6.2vw, 74px); line-height: .99; letter-spacing: -4.2px; }
+    .gradient-text { background: linear-gradient(95deg, #52c9f3 2%, #7e91ff 48%, #df68c4 94%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero-copy { max-width: 510px; color: var(--muted); font-size: 17px; line-height: 1.75; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 29px 0 17px; }
+    .button {
+      display: inline-flex; justify-content: center; align-items: center; gap: 10px;
+      min-height: 51px; padding: 0 20px; border-radius: 13px; text-decoration: none;
+      font-size: 14px; font-weight: 750; transition: transform .2s, box-shadow .2s, background .2s;
+    }
+    .button:hover { transform: translateY(-2px); }
+    .button-primary { color: white; background: linear-gradient(110deg, #1688ff, #4d7bff); box-shadow: 0 12px 32px rgba(22,136,255,.25); }
+    .button-primary:hover { box-shadow: 0 16px 38px rgba(22,136,255,.38); }
+    .button-ghost { color: #e0e9fa; border: 1px solid var(--line); background: rgba(255,255,255,.035); }
+    .button-ghost:hover { background: rgba(255,255,255,.08); }
+    .download-meta { color: #8293af; font-size: 11px; }
+    .hero-visual { position: relative; min-width: 0; }
+    .hero-glow { position: absolute; inset: 12% 4%; border-radius: 50%; background: #247cff; filter: blur(85px); opacity: .19; }
+    .hero-shot {
+      position: relative; padding: 9px; border: 1px solid rgba(159,181,219,.22);
+      border-radius: 18px; background: linear-gradient(145deg, rgba(37,57,88,.8), rgba(10,20,39,.94));
+      box-shadow: var(--shadow); transform: perspective(1200px) rotateY(-5deg) rotateX(2deg);
+    }
+    .hero-shot img { display: block; width: 100%; height: auto; border-radius: 10px; }
+    .floating-tag {
+      position: absolute; right: -13px; bottom: -19px; padding: 13px 16px;
+      border: 1px solid rgba(159,181,219,.2); border-radius: 13px;
+      background: rgba(13,27,49,.94); box-shadow: 0 14px 35px #0006;
+      color: #dbe9ff; font-size: 12px; font-weight: 700;
+    }
+    .floating-tag span { color: var(--green); }
+    .trust-row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 26px; color: #93a3bd; font-size: 12px; }
+    .trust-row span { display: inline-flex; align-items: center; gap: 7px; }
+    .trust-row b { color: #dce8fb; font-weight: 650; }
+    .section { padding: 76px 0; }
+    .section-head { max-width: 650px; margin: 0 auto 34px; text-align: center; }
+    .section-kicker { color: #79baff; font-size: 11px; font-weight: 800; letter-spacing: 1.8px; text-transform: uppercase; }
+    h2 { margin: 12px 0 12px; font-size: clamp(30px, 4vw, 43px); line-height: 1.1; letter-spacing: -1.8px; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+    .feature {
+      min-height: 190px; padding: 23px; border: 1px solid var(--line); border-radius: 17px;
+      background: linear-gradient(145deg, rgba(22,39,66,.82), rgba(12,25,46,.86));
+    }
+    .feature-icon {
+      width: 39px; height: 39px; display: grid; place-items: center; margin-bottom: 17px;
+      border: 1px solid rgba(92,163,255,.2); border-radius: 12px;
+      background: rgba(32,130,255,.12); color: #8bc5ff; font-size: 18px;
+    }
+    .feature h3 { margin: 0 0 8px; font-size: 16px; }
+    .feature p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .rust-band {
+      padding: 26px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 22px;
+      border: 1px solid rgba(101,147,255,.22); border-radius: 20px;
+      background: linear-gradient(105deg, rgba(24,82,151,.24), rgba(105,75,190,.16));
+    }
+    .rust-band h3 { margin: 0 0 7px; font-size: 20px; letter-spacing: -.5px; }
+    .rust-band p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .rust-mark { width: 66px; height: 66px; display: grid; place-items: center; border-radius: 18px; background: #f2f4f8; color: #b74132; font-size: 31px; font-weight: 900; }
+    .gallery { display: grid; grid-template-columns: repeat(6, 1fr); gap: 17px; }
+    .shot { grid-column: span 3; margin: 0; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: #101d32; }
+    .shot.wide { grid-column: span 6; }
+    .shot a { display: block; overflow: hidden; background: #071329; }
+    .shot img { display: block; width: 100%; height: auto; transition: transform .35s ease; }
+    .shot a:hover img { transform: scale(1.018); }
+    .shot figcaption { padding: 15px 17px 17px; }
+    .shot strong { display: block; margin-bottom: 5px; font-size: 14px; }
+    .shot span { color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .security {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: center;
+      padding: 26px; border: 1px solid rgba(242,183,91,.22); border-radius: 19px;
+      background: linear-gradient(120deg, rgba(97,68,25,.18), rgba(25,31,47,.9));
+    }
+    .security h3 { margin: 0 0 10px; color: #ffe0ad; font-size: 20px; }
+    .security p { margin: 0 0 12px; color: #c1b8aa; font-size: 13px; line-height: 1.75; }
+    .security ol { margin: 0; padding-left: 19px; color: #d7cbbb; font-size: 12px; line-height: 1.9; }
+    .security ol b { color: #ffe0ad; }
+    .security-pics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+    .security-pics a { display: block; overflow: hidden; border: 1px solid rgba(255,222,174,.2); border-radius: 10px; }
+    .security-pics img { display: block; width: 100%; height: auto; }
+    .final-cta {
+      margin: 24px 0 78px; padding: 43px 25px; border: 1px solid rgba(111,157,255,.24);
+      border-radius: 23px; text-align: center;
+      background: radial-gradient(ellipse at 50% 0%, rgba(55,121,255,.22), transparent 65%), #101d33;
+    }
+    .final-cta h2 { margin-top: 0; }
+    .final-cta p { color: var(--muted); font-size: 14px; margin: 0 auto 22px; max-width: 520px; line-height: 1.7; }
+    footer { border-top: 1px solid rgba(159,181,219,.1); padding: 25px 0 32px; color: #7f91ad; font-size: 11px; }
+    .footer-inner { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+    .footer-brand { display: inline-flex; align-items: center; gap: 8px; color: #c5d2e8; font-weight: 700; }
+    .footer-brand img { width: 24px; height: 24px; border-radius: 6px; }
+    @media (max-width: 850px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 38px; }
+      .hero-copy { max-width: 650px; }
+      .hero-visual { max-width: 720px; }
+      .hero-shot { transform: none; }
+      .feature-grid { grid-template-columns: repeat(2, 1fr); }
+      .security { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .container { width: min(100% - 30px, 1120px); }
+      .nav { height: 66px; }
+      .nav-links { gap: 13px; }
+      .nav-links a:not(.nav-download) { display: none; }
+      .brand img { width: 37px; height: 37px; }
+      .hero { padding: 55px 0 52px; }
+      h1 { letter-spacing: -2.8px; font-size: clamp(43px, 12vw, 60px); }
+      .hero-copy { font-size: 15px; }
+      .floating-tag { right: 5px; bottom: -16px; }
+      .section { padding: 54px 0; }
+      .feature-grid { grid-template-columns: 1fr; }
+      .feature { min-height: 0; }
+      .rust-band { grid-template-columns: 1fr; }
+      .rust-mark { display: none; }
+      .gallery { display: block; }
+      .shot { margin-bottom: 14px; }
+      .security { padding: 19px; }
+      .security-pics { grid-template-columns: 1fr; }
+      .final-cta { margin-bottom: 55px; }
+      .footer-inner { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="container nav">
+      <a class="brand" href="#">
+        <img src="DrawIT_logo.png" alt="DrawIT logó">
+        <span>DrawIT</span>
+      </a>
+      <nav class="nav-links" aria-label="Fő navigáció">
+        <a href="#funkciok">Funkciók</a>
+        <a href="#kepernyokepek">Képernyőképek</a>
+        <a href="#inditas">Első indítás</a>
+        <a class="nav-download" href="./DrawIt.exe" download>Letöltés ↓</a>
+      </nav>
+    </div>
+  </div>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-dot"></span> Képernyőrajzolás egyszerűen</div>
+          <h1>A képernyőd.<br><span class="gradient-text">A te vásznad.</span></h1>
+          <p class="hero-copy">Rajzolj, emelj ki részleteket, készíts jelöléseket és mentsd el, amit látsz. A DrawIT egy letisztult, gyors képernyőrajzoló Windowsra – megújult felülettel és Rust-alapú motorral.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="./DrawIt.exe" download><span>↓</span> DrawIT letöltése</a>
+            <a class="button button-ghost" href="#kepernyokepek">Nézd meg működés közben <span>→</span></a>
+          </div>
+          <div class="download-meta">Windows · Ingyenes · A letöltés a DrawIt.exe fájlra mutat</div>
+          <div class="trust-row">
+            <span>✦ <b>Megújult felület</b></span>
+            <span>⚡ <b>Rust-alapú motor</b></span>
+            <span>◉ <b>Könnyen kezelhető</b></span>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="hero-glow"></div>
+          <div class="hero-shot">
+            <img src="drawit-toolbar.png" alt="A DrawIT új, modern lebegő eszköztára">
+          </div>
+          <div class="floating-tag"><span>●</span> Új felület · Rust motor</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="funkciok">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Eszközök, amik kéznél vannak</div>
+          <h2>Mutasd meg, ne csak magyarázd.</h2>
+          <p>A DrawIT eszköztára segít gyorsan vizuálisan kommunikálni – akár bemutatót készítesz, hibát jelölsz, vagy csak kiemelnél valamit a képernyőn.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="feature-icon">✎</div>
+            <h3>Rajzolás és jelölés</h3>
+            <p>Szabadkézi rajz, vonalak, alakzatok, nyilak, számozás és szöveg egyetlen eszköztárból.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">◉</div>
+            <h3>Színek és vonalvastagság</h3>
+            <p>Válassz palettáról vagy egyedi színt, állítsd az átlátszóságot és a vonalvastagságot.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">▣</div>
+            <h3>Rugalmas kijelzőnézet</h3>
+            <p>Átlátszó, elmosott, fehér vagy fekete háttér – válaszd a feladathoz illő megjelenést.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">⌗</div>
+            <h3>Kivágás és mentés</h3>
+            <p>Jelölj ki egy területet, majd mentsd el vagy másold a vágólapra.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">▤</div>
+            <h3>Több kijelző kezelése</h3>
+            <p>Válassz külön monitort vagy a teljes asztalt, és exportáld PNG- vagy PDF-formátumban.</p>
+          </article>
+          <article class="feature">
+            <div class="feature-icon">⚡</div>
+            <h3>Rust-alapú működés</h3>
+            <p>A program új Rust-alapú motorra épül, amelyet a gyorsabb és hatékonyabb működés érdekében készítettél el.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="rust-band">
+          <div>
+            <h3>Új motor. Letisztultabb élmény.</h3>
+            <p>A DrawIT felülete megújult, a program pedig Rust nyelvre lett átírva a jobb sebesség és hatékonyabb működés érdekében.</p>
+          </div>
+          <div class="rust-mark" aria-label="Rust">R</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="kepernyokepek">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-kicker">Nézd meg közelebbről</div>
+          <h2>Minden eszköz, egy helyen.</h2>
+          <p>Az új DrawIT felületéről készült képernyőképek. Kattints bármelyik képre a teljes méretű megnyitáshoz.</p>
+        </div>
+        <div class="gallery">
+          <figure class="shot wide">
+            <a href="drawit-toolbar.png" target="_blank" rel="noopener"><img src="drawit-toolbar.png" alt="A DrawIT új eszköztára sötétkék háttérrel" loading="lazy"></a>
+            <figcaption><strong>Megújult eszköztár</strong><span>Átlátható, kompakt vezérlők a rajzoláshoz és a képernyő kezeléséhez.</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <a href="drawit-export.png" target="_blank" rel="noopener"><img src="drawit-export.png" alt="Kijelzők mentése PNG, PDF vagy vágólap formátumban" loading="lazy"></a>
+            <figcaption><strong>Exportálás több kijelzőről</strong><span>Válassz monitort vagy teljes asztalt, majd ments PNG-be, PDF-be vagy másold a vágólapra.</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <a href="drawit-crop.png" target="_blank" rel="noopener"><img src="drawit-crop.png" alt="Kijelölt képernyőrész kivágása" loading="lazy"></a>
+            <figcaption><strong>Pontos kivágás</strong><span>Jelöld ki a kívánt képernyőrészt, majd másold vagy exportáld.</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <a href="drawit-background.png" target="_blank" rel="noopener"><img src="drawit-background.png" alt="Átlátszó, elmosott, fehér és fekete háttérválasztó" loading="lazy"></a>
+            <figcaption><strong>Háttér egy mozdulattal</strong><span>Átlátszó, elmosott, fehér vagy fekete tábla nézet.</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <a href="drawit-colors.png" target="_blank" rel="noopener"><img src="drawit-colors.png" alt="Színpaletta, pipetta, átlátszóság és vonalvastagság" loading="lazy"></a>
+            <figcaption><strong>Részletes rajzbeállítások</strong><span>Színpaletta, egyedi szín, pipetta, átlátszóság és többféle vonalvastagság.</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="inditas">
+      <div class="container">
+        <div class="security">
+          <div>
+            <div class="section-kicker" style="color:#f0c27c">Első indítás Windows alatt</div>
+            <h3>Miért jelenhet meg a SmartScreen?</h3>
+            <p>A Windows figyelmeztethet, mert a DrawIT jelenleg nincs fizetős kódaláíró tanúsítvánnyal aláírva, ezért az ablakban az „Ismeretlen kiadó” felirat jelenhet meg. Ez önmagában nem bizonyítja, hogy a program kártékony. Csak a hivatalos letöltési helyről származó, ellenőrzött fájlt indítsd el.</p>
+            <ol>
+              <li>Az első ablakban kattints a <b>További információ</b> hivatkozásra.</li>
+              <li>A részletes ablakban ellenőrizd, hogy az alkalmazás neve <b>DrawIt.exe</b>.</li>
+              <li>Ha a fájlt a hivatalos DrawIT oldalról töltötted le, válaszd a <b>Futtatás mindenképpen</b> lehetőséget.</li>
+            </ol>
+          </div>
+          <div class="security-pics">
+            <a href="smartscreen-warning.png" target="_blank" rel="noopener"><img src="smartscreen-warning.png" alt="A Windows SmartScreen első figyelmeztető ablaka" loading="lazy"></a>
+            <a href="smartscreen-details.png" target="_blank" rel="noopener"><img src="smartscreen-details.png" alt="A SmartScreen részletes ablaka a Futtatás mindenképpen gombbal" loading="lazy"></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="container">
+      <div class="final-cta">
+        <h2>Készen állsz a rajzolásra?</h2>
+        <p>Töltsd le a DrawIT-et, és jelöld, emeld ki vagy mentsd el a képernyőd fontos részeit.</p>
+        <a class="button button-primary" href="./DrawIt.exe" download><span>↓</span> DrawIT letöltése</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div class="footer-brand"><img src="DrawIT_logo.png" alt=""> DrawIT</div>
+      <div>© 2026 DrawIT. Minden jog fenntartva.</div>
+      <div>Egyszerű képernyőrajzolás Windowsra.</div>
+    </div>
+  </footer>
+</body>
+</html>

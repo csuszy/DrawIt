@@ -1,0 +1,8 @@
+# Rust build directory
+/target/
+
+# Intermediate and scratch files
+**/*.rs.bk
+*.pdb
+*.tmp
+.system_generated/
