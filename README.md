@@ -3,7 +3,7 @@
 <p align="center">
   <img src="img/DrawIt_logo.svg" width="130" height="130" alt="DrawIt Logo" />
   <br>
-  <strong>DrawIt v0.1</strong>
+  <strong>DrawIt v0.1.1</strong>
   <br>
   <em>Villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző segédprogram Windows 10 és 11 rendszerekre</em>
 </p>

@@ -873,7 +873,7 @@ impl Toolbar {
                     let (label, is_danger) = match act {
                         PopupAction::Help => ("Súgó és billentyűk [F1]", false),
                         PopupAction::CheckUpdates => ("Frissítések keresése...", false),
-                        PopupAction::About => ("Névjegy (DrawIt v0.1)", false),
+                        PopupAction::About => (concat!("Névjegy (DrawIt v", env!("CARGO_PKG_VERSION"), ")"), false),
                         PopupAction::ExitApp => ("Kilépés a rajzolóból", true),
                         _ => ("", false),
                     };

@@ -360,7 +360,7 @@ mod tests {
         let text = String::from_utf8_lossy(&bytes);
         assert!(text.contains("tag_name"), "Response doesn't contain tag_name: {}", text);
         let tag = extract_json_str(&text, "tag_name");
-        assert_eq!(tag.as_deref(), Some("v0.1"));
+        assert!(tag.is_some() && tag.as_ref().unwrap().starts_with('v'));
         let dl = extract_asset_download_url(&text);
         assert!(dl.is_some(), "Download url not found in json");
         assert!(dl.unwrap().ends_with("DrawIt.exe"));

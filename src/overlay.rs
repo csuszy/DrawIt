@@ -597,7 +597,8 @@ impl OverlayState {
                     let dy = self.draw_current.1 - self.draw_start.1;
                     let dist = (dx * dx + dy * dy).sqrt();
 
-                    if dist > 8.0 {
+                    let radius = (th * 0.75 + 7.5).clamp(9.0, 18.0);
+                    if dist > radius + 4.0 {
                         d2d.draw_arrow(self.draw_start.0, self.draw_start.1, self.draw_current.0, self.draw_current.1, col, th);
                     }
 
@@ -914,7 +915,7 @@ impl OverlayState {
 
         // Logo & Title (Vector SVG direct render)
         d2d.draw_svg_logo(mx + 22.0, my + 58.0, mx + 68.0, my + 104.0);
-        d2d.draw_text_simple("DrawIt v0.1", mx + 78.0, my + 62.0, mx + mw - 20.0, my + 84.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
+        d2d.draw_text_simple(concat!("DrawIt v", env!("CARGO_PKG_VERSION")), mx + 78.0, my + 62.0, mx + mw - 20.0, my + 84.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
         d2d.draw_text_simple("Gyors, hordozható képernyőrajzoló és annotáló segédprogram", mx + 78.0, my + 85.0, mx + mw - 20.0, my + 104.0, 11.5, (0.75, 0.78, 0.84, 1.0), false, false);
 
         // Divider
@@ -942,16 +943,21 @@ impl OverlayState {
     }
 
     fn render_badge(&self, d2d: &D2DContext, cx: f32, cy: f32, number: usize, color: (f32, f32, f32, f32), thickness: f32) {
-        let radius = (thickness * 1.5 + 12.0).clamp(13.0, 26.0);
+        let radius = (thickness * 0.75 + 7.5).clamp(9.0, 18.0);
         // Shadow
-        d2d.fill_ellipse(cx, cy + 1.5, radius + 1.0, radius + 1.0, (0.0, 0.0, 0.0, 0.35));
+        d2d.fill_ellipse(cx, cy + 1.0, radius + 0.5, radius + 0.5, (0.0, 0.0, 0.0, 0.25));
         // Badge body
         d2d.fill_ellipse(cx, cy, radius, radius, (color.0, color.1, color.2, 1.0));
         // Outer ring
-        d2d.draw_ellipse(cx, cy, radius, radius, (1.0, 1.0, 1.0, 0.95), 2.0);
+        let border_w = (thickness * 0.15 + 1.0).clamp(1.2, 2.0);
+        d2d.draw_ellipse(cx, cy, radius, radius, (1.0, 1.0, 1.0, 0.95), border_w);
         // Number text
         let num_str = format!("{}", number);
-        let font_sz = radius * 1.15;
+        let font_sz = if number >= 10 {
+            radius * 0.92
+        } else {
+            radius * 1.08
+        };
         d2d.draw_text_simple(&num_str, cx - radius, cy - radius, cx + radius, cy + radius, font_sz, (1.0, 1.0, 1.0, 1.0), true, true);
     }
 
@@ -995,7 +1001,8 @@ impl OverlayState {
                 let dy = end.1 - start.1;
                 let dist = (dx * dx + dy * dy).sqrt();
 
-                if dist > 8.0 {
+                let radius = (*thickness * 0.75 + 7.5).clamp(9.0, 18.0);
+                if dist > radius + 4.0 {
                     d2d.draw_arrow(start.0, start.1, end.0, end.1, col, *thickness);
                 }
                 self.render_badge(d2d, start.0, start.1, *number, col, *thickness);

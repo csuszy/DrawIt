@@ -268,9 +268,12 @@ impl D2DContext {
             return;
         }
 
-        // Arrow head size proportional to stroke width, clamped
-        let head_len = (stroke_width * 3.5).clamp(16.0, 48.0);
-        let head_width = head_len * 0.65;
+        // Arrow head dimensions proportional to stroke width without artificial ceilings.
+        // head_width is always noticeably wider than the shaft (stroke_width * 1.0 + 3.0),
+        // ensuring the arrow wings are prominently visible at any stroke thickness (up to 32px+).
+        let max_head_for_len = (len * 0.75).max(6.0);
+        let head_len = (stroke_width * 1.8 + 8.0).min(max_head_for_len);
+        let head_width = (stroke_width * 1.0 + 3.0).min(head_len * 0.95);
 
         let u_x = dx / len;
         let u_y = dy / len;
@@ -281,8 +284,14 @@ impl D2DContext {
         let base_x = x1 - u_x * head_len;
         let base_y = y1 - u_y * head_len;
 
-        // Draw main shaft ending slightly inside head
-        self.draw_line(x0, y0, base_x + u_x * 4.0, base_y + u_y * 4.0, color, stroke_width);
+        // Draw main shaft ending right at the base of the arrowhead.
+        // The line's round cap extends by (stroke_width * 0.5), so backing up by
+        // (stroke_width * 0.35) lets the round cap tuck slightly into the base without poking through.
+        if len > head_len + 1.0 {
+            let shaft_end_x = base_x - u_x * (stroke_width * 0.35);
+            let shaft_end_y = base_y - u_y * (stroke_width * 0.35);
+            self.draw_line(x0, y0, shaft_end_x, shaft_end_y, color, stroke_width);
+        }
 
         // Arrow head vertices
         let left_x = base_x + p_x * head_width;

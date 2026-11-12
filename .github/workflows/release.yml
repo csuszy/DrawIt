@@ -30,12 +30,12 @@ jobs:
           Copy-Item "DrawIt_logo.ico" "Release_Artifacts/DrawIt_logo.ico" -Force
           Copy-Item "DrawIt_logo.svg" "Release_Artifacts/DrawIt_logo.svg" -Force
           Copy-Item "README.md" "Release_Artifacts/README.md" -Force
-          Compress-Archive -Path "Release_Artifacts/*" -DestinationPath "DrawIt_Standalone.zip" -Force
+          Compress-Archive -Path "Release_Artifacts/*" -DestinationPath "Standalone_Files.zip" -Force
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             Release_Artifacts/DrawIt.exe
-            DrawIt_Standalone.zip
+            Standalone_Files.zip
           generate_release_notes: true
