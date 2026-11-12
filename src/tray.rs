@@ -32,7 +32,7 @@ const HOTKEY_CTRL_ALT_D: i32 = 2;
 const HOTKEY_WIN_ALT_D: i32 = 3;
 
 const ID_TRAY_START: usize = 1001;
-const ID_TRAY_RESET: usize = 1002;
+const ID_TRAY_UPDATE: usize = 1002;
 const ID_TRAY_HELP: usize = 1003;
 const ID_TRAY_ABOUT: usize = 1004;
 const ID_TRAY_AUTOSTART: usize = 1005;
@@ -205,11 +205,8 @@ unsafe extern "system" fn tray_wndproc(
                     ID_TRAY_START => {
                         show_overlay(state.overlay_hwnd);
                     }
-                    ID_TRAY_RESET => {
-                        let ov_ptr = GetWindowLongPtrW(state.overlay_hwnd, GWLP_USERDATA) as *mut OverlayState;
-                        if !ov_ptr.is_null() {
-                            (*ov_ptr).history.reset_counter();
-                        }
+                    ID_TRAY_UPDATE => {
+                        crate::updater::prompt_and_update(state.tray_hwnd, true);
                     }
                     ID_TRAY_HELP => {
                         show_overlay(state.overlay_hwnd);
@@ -265,7 +262,7 @@ unsafe fn show_tray_context_menu(state: &TrayState) {
 
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_START, w!("Rajzolás indítása (Ctrl + 2)"));
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_RESET, w!("Számláló nullázása (1)"));
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_UPDATE, w!("Frissítések keresése..."));
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_HELP, w!("Útmutató és billentyűk (F1)"));
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_ABOUT, w!("Névjegy"));
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());

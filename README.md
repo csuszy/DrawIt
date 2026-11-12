@@ -3,7 +3,7 @@
 <p align="center">
   <img src="img/DrawIt_logo.svg" width="130" height="130" alt="DrawIt Logo" />
   <br>
-  <strong>DrawIt v0.1 (Rust Kiadás)</strong>
+  <strong>DrawIt v0.1</strong>
   <br>
   <em>Villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző segédprogram Windows 10 és 11 rendszerekre</em>
 </p>
@@ -17,6 +17,8 @@ A **DrawIt** egyetlen önálló, rendkívül gyors és hardveresen gyorsított k
 Teljesen natív **Rust** nyelven készült, közvetlen **Direct2D** és **DirectWrite** grafikus gyorsítással:
 * **Nulla külső függőség**: Nem igényel .NET keretrendszert, Visual C++ Redistributable csomagokat, sem más futtatókörnyezetet.
 * **100% Hordozható (Portable)**: Nem igényel telepítést, nem szemetel a rendszerleíró adatbázisban, közvetlenül pendrive-ról vagy bármilyen mappából futtatható.
+* **Beépített automatikus frissítéskezelő**: A szoftver a háttérben közvetlenül ellenőrzi a legújabb GitHub Releases kiadásokat. Új verzió esetén egyetlen kattintással letölti és automatikusan helyben frissíti magát.
+* **Jobb egérgombos gyors elvetés és kilépés**: Bármely megnyitott menü, pipetta, rajzolás vagy maga a rajzvászon egyetlen jobb egérkattintással azonnal bezárható.
 * **Nem kér rendszergazdai jogot**: Standard felhasználói jogosultságokkal (`asInvoker`) azonnal elindul.
 * **Minimális erőforrásigény**: Fájlmérete mindössze **~740 KB**, memóriahasználata elenyésző (~15-25 MB), és mikromásodperces késleltetéssel reagál.
 
@@ -92,9 +94,10 @@ A `Kijelző ▾` menüből négyféle munkakörnyezet választható:
 ## Telepítés és Futtatás
 
 ### Közvetlen futtatás
-1. Töltse le a [**`DrawIt.exe`**](DrawIt.exe) fájlt vagy a [**`Standalone_Files.zip`**](Standalone_Files.zip) archívumot.
+1. Töltse le a legújabb verziót a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalról (`DrawIt.exe` vagy `Standalone_Files.zip`).
 2. Indítsa el a **`DrawIt.exe`** programot.
 3. A szoftver a tálca értesítési területén fut a háttérben. A **`Ctrl + 2`** billentyűkombinációval bármikor előhívható.
+4. Frissítések: a DrawIt automatikusan jelzi az új verziókat, de a menüből a *„Frissítések keresése...”* opcióval bármikor manuálisan is ellenőrizhető.
 
 > [!NOTE]
 > **Windows SmartScreen figyelmeztetés:**

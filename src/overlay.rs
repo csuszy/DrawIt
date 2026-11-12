@@ -914,7 +914,7 @@ impl OverlayState {
 
         // Logo & Title (Vector SVG direct render)
         d2d.draw_svg_logo(mx + 22.0, my + 58.0, mx + 68.0, my + 104.0);
-        d2d.draw_text_simple("DrawIt v0.1 (Rust Kiadás)", mx + 78.0, my + 62.0, mx + mw - 20.0, my + 84.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
+        d2d.draw_text_simple("DrawIt v0.1", mx + 78.0, my + 62.0, mx + mw - 20.0, my + 84.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
         d2d.draw_text_simple("Gyors, hordozható képernyőrajzoló és annotáló segédprogram", mx + 78.0, my + 85.0, mx + mw - 20.0, my + 104.0, 11.5, (0.75, 0.78, 0.84, 1.0), false, false);
 
         // Divider
@@ -1717,10 +1717,9 @@ pub unsafe extern "system" fn overlay_wndproc(
                             state.hovered_modal_btn = None;
                             state.render();
                         }
-                        PopupAction::ResetCounter => {
-                            state.history.reset_counter();
-                            state.show_toast("Számláló alaphelyzetbe állítva: #1");
+                        PopupAction::CheckUpdates => {
                             state.toolbar.dismiss_popup();
+                            crate::updater::prompt_and_update(state.hwnd, true);
                         }
                         PopupAction::About => {
                             state.toolbar.dismiss_popup();
@@ -1974,27 +1973,14 @@ pub unsafe extern "system" fn overlay_wndproc(
 
         WM_RBUTTONDOWN => {
             let _ = SetFocus(hwnd);
-            if state.toolbar.active_tool == ToolMode::Pipette {
-                state.toolbar.active_tool = state.previous_tool_before_pipette;
-                state.pipette_buffer = None;
-                state.show_toast("Pipetta megszakítva");
+            if state.is_drawing {
+                state.is_drawing = false;
+                state.current_points.clear();
+                let _ = ReleaseCapture();
                 state.render();
                 return LRESULT(0);
             }
-            if state.toolbar.dismiss_popup() {
-                state.render();
-                return LRESULT(0);
-            }
-            if state.snip_rect.is_some() {
-                state.snip_rect = None;
-                state.render();
-                return LRESULT(0);
-            }
-            if state.curve_phase != CurvePhase::Idle {
-                state.curve_phase = CurvePhase::Idle;
-                state.render();
-                return LRESULT(0);
-            }
+            handle_escape_press(state);
             LRESULT(0)
         }
 
@@ -2241,6 +2227,10 @@ pub fn show_overlay(hwnd: HWND) {
             state.toolbar.dismiss_popup();
             state.active_modal = ActiveModal::None;
             state.hovered_modal_btn = None;
+
+            if let Some(update) = crate::updater::get_available_update() {
+                state.show_toast(&format!("Új DrawIt verzió érhető el: {} (Logo menü)", update.tag));
+            }
 
             IS_OVERLAY_OPEN.store(true, Ordering::SeqCst);
             let _ = ShowWindow(hwnd, SW_SHOW);

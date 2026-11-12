@@ -21,7 +21,7 @@ pub enum ToolbarItem {
 pub enum PopupAction {
     // Logo menu
     Help,
-    ResetCounter,
+    CheckUpdates,
     About,
     ExitApp,
     // Color picker
@@ -304,7 +304,7 @@ impl Toolbar {
                 acts.push((PopupAction::Help, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
                 ry += row_h + 4.0;
 
-                acts.push((PopupAction::ResetCounter, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
+                acts.push((PopupAction::CheckUpdates, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
                 ry += row_h + 4.0;
 
                 acts.push((PopupAction::About, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
@@ -872,7 +872,7 @@ impl Toolbar {
 
                     let (label, is_danger) = match act {
                         PopupAction::Help => ("Súgó és billentyűk [F1]", false),
-                        PopupAction::ResetCounter => ("Számláló nullázása (1)", false),
+                        PopupAction::CheckUpdates => ("Frissítések keresése...", false),
                         PopupAction::About => ("Névjegy (DrawIt v0.1)", false),
                         PopupAction::ExitApp => ("Kilépés a rajzolóból", true),
                         _ => ("", false),
@@ -882,7 +882,7 @@ impl Toolbar {
                     let icon_cy = (at + ab) / 2.0;
                     match act {
                         PopupAction::Help => d2d.draw_help_book_icon(icon_cx, icon_cy, col, 1.6),
-                        PopupAction::ResetCounter => d2d.draw_refresh_icon(icon_cx, icon_cy, col, 1.6),
+                        PopupAction::CheckUpdates => d2d.draw_refresh_icon(icon_cx, icon_cy, col, 1.6),
                         PopupAction::About => d2d.draw_info_icon(icon_cx, icon_cy, col, 1.6),
                         PopupAction::ExitApp => d2d.draw_exit_icon(icon_cx, icon_cy, col, 1.6),
                         _ => {}
