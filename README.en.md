@@ -137,9 +137,15 @@ Open the **Settings** dialog from the toolbar logo menu or tray icon:
 
 ## Installation & Running
 
-### Direct Execution
-1. Download the latest version from [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) (`DrawIt.exe` or `Standalone_Files.zip`).
-2. Run **`DrawIt.exe`**.
+DrawIt is available in multiple formats on [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest):
+
+* **Portable Version (Recommended)**: `DrawIt.exe` or `Standalone_Files.zip` – zero installation, runs anywhere (including USB drives).
+* **Microsoft Store / MSIX Package**: `DrawIt.msix` – modern Windows application package for Microsoft Store or direct sideloading.
+* **Windows Installer**: `DrawIt-Setup.exe` – classic setup wizard with Start Menu integration (per-user install, no admin privileges required).
+
+### Getting Started
+1. Download your preferred package from [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest).
+2. Launch the application.
 3. DrawIt sits quietly in your system tray notification area. Press **`Ctrl + 2`** anytime to start drawing.
 4. Updates: DrawIt automatically notifies you when new releases are available, or check anytime from the menu via *Check for Updates...*.
 

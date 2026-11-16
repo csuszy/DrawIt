@@ -27,11 +27,18 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "Release_Artifacts"
           Copy-Item "target/release/drawit.exe" "Release_Artifacts/DrawIt.exe" -Force
+          Copy-Item "target/release/drawit.exe" "DrawIt.exe" -Force
           Copy-Item "DrawIt_logo.ico" "Release_Artifacts/DrawIt_logo.ico" -Force
           Copy-Item "DrawIt_logo.svg" "Release_Artifacts/DrawIt_logo.svg" -Force
           Copy-Item "README.md" "Release_Artifacts/README.md" -Force
           Copy-Item "README.en.md" "Release_Artifacts/README.en.md" -Force
           Compress-Archive -Path "Release_Artifacts/*" -DestinationPath "Standalone_Files.zip" -Force
+
+      - name: Build MSIX and Inno Setup packages
+        shell: powershell
+        run: |
+          choco install innosetup --no-progress
+          powershell -ExecutionPolicy Bypass -File packaging\build-packages.ps1 -SkipReleaseBuild
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -39,4 +46,6 @@ jobs:
           files: |
             Release_Artifacts/DrawIt.exe
             Standalone_Files.zip
+            DrawIt.msix
+            DrawIt-Setup.exe
           generate_release_notes: true

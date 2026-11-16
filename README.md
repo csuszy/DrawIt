@@ -135,9 +135,15 @@ A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető 
 
 ## Telepítés és Futtatás
 
-### Közvetlen futtatás
-1. Töltse le a legújabb verziót a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalról (`DrawIt.exe` vagy `Standalone_Files.zip`).
-2. Indítsa el a **`DrawIt.exe`** programot.
+A DrawIt többféle formátumban érhető el a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalon:
+
+* **Hordozható változat (Portable - Ajánlott)**: `DrawIt.exe` vagy `Standalone_Files.zip` – nincs telepítés, pendrive-ról is azonnal fut.
+* **Microsoft Store / MSIX csomag**: `DrawIt.msix` – modern Windows alkalmazáscsomag a Microsoft Store áruházhoz vagy közvetlen Windows App Installer telepítéshez.
+* **Windows Telepítő**: `DrawIt-Setup.exe` – hagyományos varázslós telepítő start menü ikonnal (nem igényel rendszergazdai jogot, felhasználói szinten települ).
+
+### Közvetlen indítás
+1. Töltse le a kívánt változatot a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalról.
+2. Indítsa el a programot.
 3. A szoftver a tálca értesítési területén fut a háttérben. A **`Ctrl + 2`** billentyűkombinációval bármikor előhívható.
 4. Frissítések: a DrawIt automatikusan jelzi az új verziókat, de a menüből a *„Frissítések keresése...”* opcióval bármikor manuálisan is ellenőrizhető.
 
