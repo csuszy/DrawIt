@@ -70,6 +70,7 @@ pub struct Toolbar {
     pub screen_width: f32,
     pub can_undo: bool,
     pub can_redo: bool,
+    pub language: crate::i18n::Language,
 }
 
 #[derive(PartialEq)]
@@ -109,6 +110,7 @@ impl Toolbar {
             screen_width,
             can_undo: false,
             can_redo: false,
+            language: crate::i18n::Language::Hu,
         }
     }
 
@@ -453,7 +455,7 @@ impl Toolbar {
                         y: 0,
                         width: self.screen_width as i32,
                         height: 1080,
-                        _is_primary: true,
+                        is_primary: true,
                         name: "1. Kijelző".to_string(),
                     }]
                 } else {
@@ -707,8 +709,8 @@ impl Toolbar {
                         let icon_cy = (t + b) / 2.0;
                         mode.draw_icon(d2d, icon_cx, icon_cy, (1.0, 1.0, 1.0, 1.0), 1.8);
 
-                        // Hungarian label cleanly on right
-                        d2d.draw_text_simple(mode.label_hu(), l + 28.0, t, r - 6.0, b, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+                        // Localized label cleanly on right
+                        d2d.draw_text_simple(mode.label(self.language), l + 28.0, t, r - 6.0, b, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
                     } else {
                         if is_hovered {
                             d2d.fill_rounded_rectangle(l, t, r, b, 8.0, (1.0, 1.0, 1.0, 0.10));
@@ -798,7 +800,7 @@ impl Toolbar {
                     let icon_cx = l + 14.0;
                     let icon_cy = (t + b) / 2.0;
                     d2d.draw_monitor_icon(icon_cx, icon_cy, col, 1.6);
-                    d2d.draw_text_simple("Kijelző ▾", l + 25.0, t, r - 4.0, b, 12.0, col, false, true);
+                    d2d.draw_text_simple(self.language.canvas_btn(), l + 25.0, t, r - 4.0, b, 12.0, col, false, true);
                 }
 
                 ToolbarItem::SnipButton => {
@@ -810,14 +812,14 @@ impl Toolbar {
                         d2d.fill_rounded_rectangle(l, t, r, b, 10.0, (0.04, 0.52, 1.0, 0.95));
                         d2d.draw_rounded_rectangle(l, t, r, b, 10.0, (1.0, 1.0, 1.0, 0.25), 1.0);
                         d2d.draw_crop_icon(icon_cx, icon_cy, (1.0, 1.0, 1.0, 1.0), 1.8);
-                        d2d.draw_text_simple("Kivágás", l + 28.0, t, r - 6.0, b, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+                        d2d.draw_text_simple(self.language.snip_btn(), l + 28.0, t, r - 6.0, b, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
                     } else {
                         if is_hovered {
                             d2d.fill_rounded_rectangle(l, t, r, b, 8.0, (1.0, 1.0, 1.0, 0.10));
                         }
                         let col = if is_hovered { (1.0, 1.0, 1.0, 1.0) } else { (0.85, 0.87, 0.90, 1.0) };
                         d2d.draw_crop_icon(icon_cx, icon_cy, col, 1.6);
-                        d2d.draw_text_simple("Kivágás", l + 28.0, t, r - 6.0, b, 12.0, col, is_hovered, true);
+                        d2d.draw_text_simple(self.language.snip_btn(), l + 28.0, t, r - 6.0, b, 12.0, col, is_hovered, true);
                     }
                 }
 
@@ -830,7 +832,7 @@ impl Toolbar {
                     let icon_cx = l + 16.0;
                     let icon_cy = (t + b) / 2.0;
                     d2d.draw_save_icon(icon_cx, icon_cy, col, 1.6);
-                    d2d.draw_text_simple("Kijelző mentése ▾", l + 28.0, t, r - 6.0, b, 12.0, col, false, true);
+                    d2d.draw_text_simple(self.language.export_display_btn(), l + 28.0, t, r - 6.0, b, 12.0, col, false, true);
                 }
 
                 ToolbarItem::CloseButton => {
@@ -874,12 +876,16 @@ impl Toolbar {
                     let bg = if is_hov { (1.0, 1.0, 1.0, 0.12) } else { (1.0, 1.0, 1.0, 0.05) };
                     d2d.fill_rounded_rectangle(al, at, ar, ab, 8.0, bg);
 
+                    let about_text;
                     let (label, is_danger) = match act {
-                        PopupAction::Help => ("Súgó és billentyűk [F1]", false),
-                        PopupAction::Settings => ("Beállítások...", false),
-                        PopupAction::CheckUpdates => ("Frissítések keresése...", false),
-                        PopupAction::About => (concat!("Névjegy (DrawIt v", env!("CARGO_PKG_VERSION"), ")"), false),
-                        PopupAction::ExitApp => ("Kilépés a rajzolóból", true),
+                        PopupAction::Help => (self.language.menu_help(), false),
+                        PopupAction::Settings => (self.language.menu_settings(), false),
+                        PopupAction::CheckUpdates => (self.language.menu_check_updates(), false),
+                        PopupAction::About => {
+                            about_text = format!("{} (DrawIt v{})", self.language.tray_about(), env!("CARGO_PKG_VERSION"));
+                            (about_text.as_str(), false)
+                        }
+                        PopupAction::ExitApp => (self.language.menu_exit(), true),
                         _ => ("", false),
                     };
                     let col = if is_danger { (1.0, 0.35, 0.3, 1.0) } else { (0.9, 0.92, 0.95, 1.0) };
@@ -899,13 +905,13 @@ impl Toolbar {
 
             OpenPopup::ColorPicker => {
                 // Section Headers with aligned, generous spacing that never overlap buttons
-                d2d.draw_text_simple("Színek és paletta", pop_l + 16.0, pop_t + 12.0, pop_r - 16.0, pop_t + 28.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
+                d2d.draw_text_simple(self.language.palette_title(), pop_l + 16.0, pop_t + 12.0, pop_r - 16.0, pop_t + 28.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
 
-                d2d.draw_text_simple("Egyedi színskála és pipetta", pop_l + 16.0, pop_t + 106.0, pop_r - 16.0, pop_t + 122.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
+                d2d.draw_text_simple(self.language.custom_color_title(), pop_l + 16.0, pop_t + 106.0, pop_r - 16.0, pop_t + 122.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
 
-                d2d.draw_text_simple("Átlátszatlanság", pop_l + 16.0, pop_t + 196.0, pop_r - 16.0, pop_t + 212.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
+                d2d.draw_text_simple(self.language.opacity_title(), pop_l + 16.0, pop_t + 196.0, pop_r - 16.0, pop_t + 212.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
 
-                d2d.draw_text_simple("Vonalvastagság", pop_l + 16.0, pop_t + 260.0, pop_r - 16.0, pop_t + 276.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
+                d2d.draw_text_simple(self.language.thickness_title(), pop_l + 16.0, pop_t + 260.0, pop_r - 16.0, pop_t + 276.0, 12.0, (0.7, 0.75, 0.82, 1.0), true, false);
 
                 for (act, (al, at, ar, ab)) in actions {
                     let is_hov = self.hovered_action == Some(act);
@@ -1000,7 +1006,7 @@ impl Toolbar {
                             d2d.fill_rounded_rectangle(al, at, ar, ab, 6.0, bg);
                             d2d.draw_rounded_rectangle(al, at, ar, ab, 6.0, border, 1.0);
                             d2d.draw_pipette_icon(al + 16.0, (at + ab) / 2.0, col, 1.5);
-                            d2d.draw_text_simple("Pipetta", al + 28.0, at, ar - 4.0, ab, 11.5, col, is_hov, false);
+                            d2d.draw_text_simple(self.language.pipette_btn(), al + 28.0, at, ar - 4.0, ab, 11.5, col, is_hov, false);
                         }
 
                         PopupAction::SelectOpacity(op) => {
@@ -1066,7 +1072,7 @@ impl Toolbar {
                             CanvasMode::Whiteboard => d2d.draw_whiteboard_icon(icon_cx, icon_cy, col, 1.6),
                             CanvasMode::Blackboard => d2d.draw_blackboard_icon(icon_cx, icon_cy, col, 1.6),
                         }
-                        d2d.draw_text_simple(mode.label_hu(), al + 32.0, at, ar - 8.0, ab, 12.0, col, is_curr, false);
+                        d2d.draw_text_simple(mode.label(self.language), al + 32.0, at, ar - 8.0, ab, 12.0, col, is_curr, false);
                     }
                 }
             }
@@ -1074,7 +1080,7 @@ impl Toolbar {
             OpenPopup::SaveDisplay => {
                 // Header
                 d2d.draw_text_simple(
-                    "Kijelző képének mentése",
+                    self.language.export_title(),
                     pop_l + 16.0,
                     pop_t + 12.0,
                     pop_r - 16.0,
@@ -1110,11 +1116,14 @@ impl Toolbar {
 
                 for idx in row_indices {
                     let name = if idx == usize::MAX {
-                        "Teljes asztal (összes kijelző)".to_string()
+                        self.language.export_all_monitors().to_string()
                     } else if let Some(m) = self.monitors.iter().find(|m| m.index == idx) {
-                        m.name.clone()
+                        m.display_name(self.language)
                     } else {
-                        format!("{}. Kijelző", idx + 1)
+                        match self.language {
+                            crate::i18n::Language::Hu => format!("{}. Kijelző", idx + 1),
+                            crate::i18n::Language::En => format!("Display {}", idx + 1),
+                        }
                     };
 
                     let png_rect = actions.iter().find(|(a, _)| *a == PopupAction::SaveMonitorPng(idx)).map(|(_, r)| *r);
@@ -1157,7 +1166,7 @@ impl Toolbar {
                         d2d.fill_rounded_rectangle(cr.0, cr.1, cr.2, cr.3, 6.0, clip_bg);
                         d2d.draw_rounded_rectangle(cr.0, cr.1, cr.2, cr.3, 6.0, (0.2, 0.8, 0.4, 0.6), 1.0);
                         d2d.draw_clipboard_icon(cr.0 + 16.0, (cr.1 + cr.3) / 2.0, (1.0, 1.0, 1.0, 1.0), 1.5);
-                        d2d.draw_text_simple("Másolás", cr.0 + 26.0, cr.1, cr.2 - 4.0, cr.3, 11.5, (1.0, 1.0, 1.0, 1.0), true, true);
+                        d2d.draw_text_simple(self.language.export_copy(), cr.0 + 26.0, cr.1, cr.2 - 4.0, cr.3, 11.5, (1.0, 1.0, 1.0, 1.0), true, true);
                     }
                 }
             }

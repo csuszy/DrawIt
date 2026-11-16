@@ -620,6 +620,32 @@ impl D2DContext {
         }
     }
 
+    pub fn draw_keyboard_icon(&self, cx: f32, cy: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
+        // Keyboard outer body
+        self.draw_rounded_rectangle(cx - 7.5, cy - 5.0, cx + 7.5, cy + 5.0, 2.0, color, stroke_width);
+        // Top row keys
+        self.draw_line(cx - 5.0, cy - 2.2, cx - 3.0, cy - 2.2, color, stroke_width);
+        self.draw_line(cx - 1.0, cy - 2.2, cx + 1.0, cy - 2.2, color, stroke_width);
+        self.draw_line(cx + 3.0, cy - 2.2, cx + 5.0, cy - 2.2, color, stroke_width);
+        // Middle row keys
+        self.draw_line(cx - 4.5, cy + 0.2, cx - 2.5, cy + 0.2, color, stroke_width);
+        self.draw_line(cx - 0.5, cy + 0.2, cx + 1.5, cy + 0.2, color, stroke_width);
+        self.draw_line(cx + 3.5, cy + 0.2, cx + 5.0, cy + 0.2, color, stroke_width);
+        // Spacebar
+        self.draw_line(cx - 3.5, cy + 2.7, cx + 3.5, cy + 2.7, color, stroke_width);
+    }
+
+    pub fn draw_checkmark_icon(&self, cx: f32, cy: f32, size: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
+        let x1 = cx - size * 0.42;
+        let y1 = cy + size * 0.05;
+        let x2 = cx - size * 0.08;
+        let y2 = cy + size * 0.40;
+        let x3 = cx + size * 0.46;
+        let y3 = cy - size * 0.40;
+        self.draw_line(x1, y1, x2, y2, color, stroke_width);
+        self.draw_line(x2, y2, x3, y3, color, stroke_width);
+    }
+
     pub fn draw_exit_icon(&self, cx: f32, cy: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
         // Door frame
         self.draw_line(cx + 1.0, cy - 5.5, cx - 4.5, cy - 5.5, color, stroke_width);

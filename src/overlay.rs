@@ -6,8 +6,8 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Direct2D::ID2D1Bitmap;
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
-    ReleaseDC, SelectObject, UpdateWindow, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-    SRCCOPY,
+    ReleaseDC, SelectObject, UpdateWindow, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT,
+    DIB_RGB_COLORS, SRCCOPY,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, RegisterHotKey, ReleaseCapture, SetActiveWindow, SetCapture, SetFocus,
@@ -111,6 +111,8 @@ pub struct OverlayState {
     pub held_key_down: Option<(u32, std::time::Instant)>,
     pub ctrl_used_for_shortcut: bool,
     pub temp_settings: crate::settings::AppSettings,
+    pub settings_tab: usize,
+    pub rebinding_tool: Option<ToolMode>,
     pub active_modal: ActiveModal,
     pub hovered_modal_btn: Option<ModalButton>,
 }
@@ -129,6 +131,7 @@ impl OverlayState {
 
         let mut toolbar = Toolbar::new(capture.width as f32, capture.monitors.clone());
         let settings = crate::settings::get_settings();
+        toolbar.language = settings.language;
         toolbar.thickness = settings.last_thickness;
         toolbar.set_color_rgb(settings.last_color);
 
@@ -172,6 +175,8 @@ impl OverlayState {
             held_key_down: None,
             ctrl_used_for_shortcut: false,
             temp_settings: settings,
+            settings_tab: 0,
+            rebinding_tool: None,
             active_modal: ActiveModal::None,
             hovered_modal_btn: None,
         }
@@ -433,17 +438,33 @@ impl OverlayState {
     pub fn capture_rendered_canvas(&mut self) -> Vec<u8> {
         self.hide_toolbar_during_capture = true;
         self.render();
+        unsafe {
+            let _ = UpdateWindow(self.hwnd);
+        }
         self.hide_toolbar_during_capture = false;
 
         unsafe {
             let w = self.capture.width;
             let h = self.capture.height;
-            let hdc_wnd = GetDC(self.hwnd);
-            let hdc_mem = CreateCompatibleDC(hdc_wnd);
-            let h_bmp = CreateCompatibleBitmap(hdc_wnd, w as i32, h as i32);
+            let x = self.capture.left;
+            let y = self.capture.top;
+
+            let hdc_screen = GetDC(None);
+            let hdc_mem = CreateCompatibleDC(hdc_screen);
+            let h_bmp = CreateCompatibleBitmap(hdc_screen, w as i32, h as i32);
             let h_old = SelectObject(hdc_mem, h_bmp);
 
-            let _ = BitBlt(hdc_mem, 0, 0, w as i32, h as i32, hdc_wnd, 0, 0, SRCCOPY);
+            let _ = BitBlt(
+                hdc_mem,
+                0,
+                0,
+                w as i32,
+                h as i32,
+                hdc_screen,
+                x,
+                y,
+                SRCCOPY | CAPTUREBLT,
+            );
 
             let mut bmi: BITMAPINFO = mem::zeroed();
             bmi.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
@@ -453,7 +474,8 @@ impl OverlayState {
             bmi.bmiHeader.biBitCount = 32;
             bmi.bmiHeader.biCompression = BI_RGB.0;
 
-            let mut pixels = vec![0u8; (w as usize) * (h as usize) * 4];
+            let total_pixels = (w as usize) * (h as usize);
+            let mut pixels = vec![0u8; total_pixels * 4];
             GetDIBits(
                 hdc_mem,
                 h_bmp,
@@ -464,12 +486,23 @@ impl OverlayState {
                 DIB_RGB_COLORS,
             );
 
+            // Ensure 100% opaque alpha channel on all pixels
+            for i in 0..total_pixels {
+                pixels[i * 4 + 3] = 255;
+            }
+
             SelectObject(hdc_mem, h_old);
             let _ = DeleteObject(h_bmp);
             let _ = DeleteDC(hdc_mem);
-            ReleaseDC(self.hwnd, hdc_wnd);
+            ReleaseDC(None, hdc_screen);
 
-            // Re-render toolbar
+            // Fallback to initial capture pixels if screen capture returned empty
+            let has_content = pixels.iter().any(|&b| b != 0);
+            if !has_content && self.capture.pixels.len() == pixels.len() {
+                pixels.copy_from_slice(&self.capture.pixels);
+            }
+
+            // Re-render overlay with toolbar and snip UI
             self.render();
 
             pixels
@@ -481,15 +514,16 @@ impl OverlayState {
         let full_bgra = self.capture_rendered_canvas();
         let full_w = self.capture.width;
         let full_h = self.capture.height;
+        let lang = self.toolbar.language;
 
         let (crop_x, crop_y, crop_w, crop_h, label) = if monitor_idx == usize::MAX {
-            (0, 0, full_w, full_h, "DrawIt_Teljes_Asztal".to_string())
+            (0, 0, full_w, full_h, lang.default_desktop_name().to_string())
         } else if let Some(m) = self.capture.monitors.iter().find(|m| m.index == monitor_idx) {
             let cx = (m.x - self.capture.left).max(0) as u32;
             let cy = (m.y - self.capture.top).max(0) as u32;
-            (cx, cy, m.width as u32, m.height as u32, format!("DrawIt_{}_Kijelzo", m.index + 1))
+            (cx, cy, m.width as u32, m.height as u32, lang.default_display_name_prefix(m.index))
         } else {
-            (0, 0, full_w, full_h, "DrawIt_Képernyő".to_string())
+            (0, 0, full_w, full_h, lang.default_desktop_name().to_string())
         };
 
         let cropped_bgra = crop_bgra(&full_bgra, full_w, full_h, crop_x, crop_y, crop_w, crop_h);
@@ -497,7 +531,7 @@ impl OverlayState {
         match format {
             "clipboard" => {
                 if copy_bgra_to_clipboard(self.hwnd, crop_w, crop_h, &cropped_bgra) {
-                    self.show_toast("✓ Kijelző képe másolva a vágólapra!");
+                    self.show_toast(lang.toast_display_copied());
                 }
             }
             "png" => {
@@ -507,7 +541,7 @@ impl OverlayState {
                 let saved = save_png_dialog(anchor, &default_name, crop_w, crop_h, &rgba);
                 unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(anchor); }
                 if saved.is_some() {
-                    self.show_toast("✓ Kijelző képe elmentve PNG fájlba!");
+                    self.show_toast(lang.toast_display_saved_png());
                 }
             }
             "pdf" => {
@@ -517,7 +551,7 @@ impl OverlayState {
                 let saved = save_pdf_dialog(anchor, &default_name, crop_w, crop_h, &rgba);
                 unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(anchor); }
                 if saved.is_some() {
-                    self.show_toast("✓ Kijelző elmentve PDF fájlba!");
+                    self.show_toast(lang.toast_display_saved_pdf());
                 }
             }
             _ => {}
@@ -676,7 +710,7 @@ impl OverlayState {
         }
 
         // 5. Render Snipping Tool Overlay
-        if self.toolbar.active_tool == ToolMode::Snip {
+        if !self.hide_toolbar_during_capture && self.toolbar.active_tool == ToolMode::Snip {
             self.render_snip_overlay(d2d);
         }
 
@@ -699,11 +733,13 @@ impl OverlayState {
         }
 
         // 9. Render In-App Modal Dialog (Help / Settings / About)
-        match self.active_modal {
-            ActiveModal::Help => self.render_help_modal(d2d),
-            ActiveModal::Settings => self.render_settings_modal(d2d),
-            ActiveModal::About => self.render_about_modal(d2d),
-            ActiveModal::None => {}
+        if !self.hide_toolbar_during_capture {
+            match self.active_modal {
+                ActiveModal::Help => self.render_help_modal(d2d),
+                ActiveModal::Settings => self.render_settings_modal(d2d),
+                ActiveModal::About => self.render_about_modal(d2d),
+                ActiveModal::None => {}
+            }
         }
 
         let _ = d2d.end_draw();
@@ -787,7 +823,7 @@ impl OverlayState {
             }
             ActiveModal::Settings => {
                 let mw = 640.0;
-                let mh = 560.0;
+                let mh = 630.0;
                 let mx = (mon_x + (mon_w - mw) / 2.0).max(mon_x + 10.0);
                 let my = (mon_y + (mon_h - mh) / 2.0).max(mon_y + 10.0);
 
@@ -820,6 +856,7 @@ impl OverlayState {
 
         let (mx, my, mx2, my2) = card;
         let mw = mx2 - mx;
+        let lang = self.temp_settings.language;
 
         // 1. Semi-transparent dark overlay dimming
         d2d.fill_rectangle(0.0, 0.0, self.capture.width as f32, self.capture.height as f32, (0.0, 0.0, 0.0, 0.55));
@@ -834,7 +871,7 @@ impl OverlayState {
 
         // 4. Header title & close button
         d2d.draw_help_book_icon(mx + 30.0, my + 25.0, (0.22, 0.74, 0.97, 1.0), 1.6);
-        d2d.draw_text_simple("DrawIt – Útmutató és Gyorsbillentyűk", mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
+        d2d.draw_text_simple(lang.help_title(), mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
 
         let is_close_hov = self.hovered_modal_btn == Some(ModalButton::Close);
         let close_cx = (close.0 + close.2) / 2.0;
@@ -855,64 +892,84 @@ impl OverlayState {
         let mut cur_y = my + 56.0;
 
         // Group 1: Aktiválás
-        d2d.draw_text_simple("Aktiválás:", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+        d2d.draw_text_simple(lang.help_group_activation(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
         cur_y += 20.0;
-        d2d.draw_text_simple("• Ctrl + 2 (vagy Ctrl + Alt + D) bárhonnan a rendszerből", left_x + 8.0, cur_y, right_x, cur_y + 18.0, 12.0, (0.85, 0.88, 0.92, 1.0), false, false);
+        let act_line = format!(
+            "• {} ({})",
+            self.temp_settings.global_hotkey,
+            if lang == crate::i18n::Language::Hu { "bárhonnan a rendszerből" } else { "from anywhere in Windows" }
+        );
+        d2d.draw_text_simple(&act_line, left_x + 8.0, cur_y, right_x, cur_y + 18.0, 12.0, (0.85, 0.88, 0.92, 1.0), false, false);
         cur_y += 26.0;
 
         // Group 2: Rajzeszközök
-        d2d.draw_text_simple("Rajzeszközök:", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+        d2d.draw_text_simple(lang.help_group_tools(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
         cur_y += 20.0;
-        let tool_lines = [
-            "• Rajz / Vonal / Nyíl: Szabadkézi toll, egyenes vonalak és folyamatnyilak",
-            "• Téglalap / Kör: Területek keretezése és fókusz kiemelése (körvonal)",
-            "• Takarás: Kitöltött téglalap érzékeny adatok, jelszavak azonnali maszkolására",
-            "• Számozás: Húzzon egy nyilat, a számozott körjelvény automatikusan a nyíl tövére kerül",
-            "• Ív: Húzzon egy vonalat, engedje fel az egeret, hajlítsa meg a kurzorral, majd kattintson",
-            "• Szöveg: Kattintson bárhová és gépeljen közvetlenül a vászonra (Enter lezár)",
-            "• Elmosás: Érzékeny adatok, képernyőterületek azonnali elhomályosítása",
-            "• Kivágás: Képernyőrészlet kijelölése másoláshoz vagy fájlba mentéshez",
-        ];
-        for line in tool_lines {
+        for line in lang.help_tool_lines() {
             d2d.draw_text_simple(line, left_x + 8.0, cur_y, right_x, cur_y + 17.0, 11.5, (0.85, 0.88, 0.92, 1.0), false, false);
             cur_y += 19.0;
         }
         cur_y += 8.0;
 
         // Group 3: Színek és Gyorsbillentyűk
-        d2d.draw_text_simple("Színek és Gyorsbillentyűk:", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+        d2d.draw_text_simple(lang.help_group_shortcuts(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
         cur_y += 20.0;
-        let shortcut_lines = [
-            "• Színválasztó: 18 gyorsszín, Beépített színkeverő és Pipetta képernyő-mintavevő",
-            "• Ctrl + Görgő (vagy görgő): Vonalvastagság és szövegméret gyors állítása (1–32 px)",
-            "• Esc: Kilépés / Mégse   |   Ctrl + Z / Ctrl + Y: Visszavonás / Újra",
-            "• Delete / Radír: Rajzok azonnali letörlése (Tiszta lap, számláló nullázása 1-re)",
-            "• F1: Ezen súgóablak megjelenítése vagy bezárása",
-        ];
-        for line in shortcut_lines {
+        for line in lang.help_shortcut_lines() {
             d2d.draw_text_simple(line, left_x + 8.0, cur_y, right_x, cur_y + 17.0, 11.5, (0.85, 0.88, 0.92, 1.0), false, false);
             cur_y += 19.0;
         }
 
-        // Action button "Rendben"
+        // Action button
         let is_act_hov = self.hovered_modal_btn == Some(ModalButton::Action);
         let act_bg = if is_act_hov { (0.04, 0.52, 1.0, 1.0) } else { (0.04, 0.52, 1.0, 0.88) };
         d2d.fill_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, act_bg);
         d2d.draw_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, (1.0, 1.0, 1.0, 0.3), 1.0);
-        d2d.draw_text_simple("Rendben", act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
+        d2d.draw_text_simple(lang.help_btn_ok(), act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
     }
+}
 
-    pub fn get_settings_controls(&self) -> Option<(Vec<(String, (f32, f32, f32, f32))>, (f32, f32, f32, f32), (f32, f32, f32, f32))> {
+pub struct SettingsControls {
+    pub tab_rects: [(usize, (f32, f32, f32, f32)); 2],
+    pub lang_rects: Vec<(crate::i18n::Language, (f32, f32, f32, f32))>,
+    pub hk_rects: Vec<(String, (f32, f32, f32, f32))>,
+    pub auto_r: (f32, f32, f32, f32),
+    pub upd_r: (f32, f32, f32, f32),
+    pub tool_key_rects: Vec<(ToolMode, (f32, f32, f32, f32))>,
+    pub reset_kb_r: (f32, f32, f32, f32),
+}
+
+impl OverlayState {
+    pub fn get_settings_controls(&self) -> Option<SettingsControls> {
         let (card, _, _) = self.get_modal_layout()?;
         let (mx, my, mx2, _) = card;
         let mw = mx2 - mx;
         let left_x = mx + 22.0;
         let right_x = mx + mw - 22.0;
+        let start_btn_x = left_x + 8.0;
 
-        let hk_y = my + 242.0;
+        // Tabs
+        let tab_y1 = my + 54.0;
+        let tab_y2 = my + 86.0;
+        let tab_w = 140.0;
+        let tab_gap = 10.0;
+        let tab0_r = (start_btn_x, tab_y1, start_btn_x + tab_w, tab_y2);
+        let tab1_r = (start_btn_x + tab_w + tab_gap, tab_y1, start_btn_x + tab_w * 2.0 + tab_gap, tab_y2);
+        let tab_rects = [(0, tab0_r), (1, tab1_r)];
+
+        // Tab 0: General
+        let lang_y = my + 134.0;
+        let lang_w = 130.0;
+        let lang_gap = 12.0;
+        let hu_r = (start_btn_x, lang_y, start_btn_x + lang_w, lang_y + 32.0);
+        let en_r = (start_btn_x + lang_w + lang_gap, lang_y, start_btn_x + lang_w + lang_gap + lang_w, lang_y + 32.0);
+        let lang_rects = vec![
+            (crate::i18n::Language::Hu, hu_r),
+            (crate::i18n::Language::En, en_r),
+        ];
+
+        let hk_y = my + 224.0;
         let btn_w = 134.0;
         let btn_gap = 12.0;
-        let start_btn_x = left_x + 8.0;
         let hotkey_options = ["Ctrl+2", "F8", "Ctrl+Alt+D", "Win+Alt+D"];
         let mut hk_rects = Vec::new();
         for (idx, opt) in hotkey_options.iter().enumerate() {
@@ -923,13 +980,61 @@ impl OverlayState {
             hk_rects.push((opt.to_string(), (bx1, by1, bx2, by2)));
         }
 
-        let auto_y = my + 322.0;
+        let auto_y = my + 316.0;
         let auto_r = (left_x + 8.0, auto_y, right_x, auto_y + 24.0);
 
-        let upd_y = my + 354.0;
+        let upd_y = my + 350.0;
         let upd_r = (left_x + 8.0, upd_y, right_x, upd_y + 24.0);
 
-        Some((hk_rects, auto_r, upd_r))
+        // Tab 1: Keybindings Grid
+        let col1_x = start_btn_x;
+        let col_w = 280.0;
+        let col2_x = start_btn_x + col_w + 16.0;
+        let grid_y = my + 166.0;
+        let row_h = 36.0;
+
+        let col1_tools = [
+            ToolMode::Freehand,
+            ToolMode::Line,
+            ToolMode::Arrow,
+            ToolMode::Rectangle,
+            ToolMode::FilledRectangle,
+            ToolMode::Circle,
+        ];
+        let col2_tools = [
+            ToolMode::NumberedBadge,
+            ToolMode::Curve,
+            ToolMode::Text,
+            ToolMode::Blur,
+            ToolMode::Snip,
+            ToolMode::Pipette,
+        ];
+
+        let mut tool_key_rects = Vec::new();
+        for (i, &t) in col1_tools.iter().enumerate() {
+            let ry1 = grid_y + (i as f32) * row_h;
+            let ry2 = ry1 + 30.0;
+            tool_key_rects.push((t, (col1_x, ry1, col1_x + col_w, ry2)));
+        }
+        for (i, &t) in col2_tools.iter().enumerate() {
+            let ry1 = grid_y + (i as f32) * row_h;
+            let ry2 = ry1 + 30.0;
+            tool_key_rects.push((t, (col2_x, ry1, col2_x + col_w, ry2)));
+        }
+
+        let reset_y = my + 472.0;
+        let reset_w = 260.0;
+        let reset_kb_r = (start_btn_x, reset_y, start_btn_x + reset_w, reset_y + 32.0);
+
+        Some(SettingsControls {
+            tab_rects,
+            lang_rects,
+            hk_rects,
+            auto_r,
+            upd_r,
+            tool_key_rects,
+            reset_kb_r,
+        })
     }
 
     fn render_settings_modal(&self, d2d: &D2DContext) {
@@ -940,6 +1045,7 @@ impl OverlayState {
 
         let (mx, my, mx2, my2) = card;
         let mw = mx2 - mx;
+        let lang = self.temp_settings.language;
 
         // 1. Semi-transparent dark overlay dimming
         d2d.fill_rectangle(0.0, 0.0, self.capture.width as f32, self.capture.height as f32, (0.0, 0.0, 0.0, 0.55));
@@ -954,7 +1060,7 @@ impl OverlayState {
 
         // 4. Header title & close button
         d2d.draw_gear_icon(mx + 30.0, my + 25.0, (0.22, 0.74, 0.97, 1.0), 1.6);
-        d2d.draw_text_simple("DrawIt – Beállítások", mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
+        d2d.draw_text_simple(lang.settings_title(), mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
 
         let is_close_hov = self.hovered_modal_btn == Some(ModalButton::Close);
         let close_cx = (close.0 + close.2) / 2.0;
@@ -971,119 +1077,244 @@ impl OverlayState {
 
         let left_x = mx + 22.0;
         let right_x = mx + mw - 22.0;
-        let mut cur_y = my + 54.0;
-
-        // SECTION 1: Rugós és Gyorsbillentyűk
-        d2d.draw_text_simple("Gyorsbillentyűk & Rugós eszközök (Hold / Tap):", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
-        cur_y += 24.0;
-
-        let draw_key_pill = |d2d: &D2DContext, k_text: &str, l_text: &str, kx: f32, ky: f32, kw: f32, total_w: f32| {
-            d2d.fill_rounded_rectangle(kx, ky, kx + kw, ky + 22.0, 5.0, (1.0, 1.0, 1.0, 0.14));
-            d2d.draw_rounded_rectangle(kx, ky, kx + kw, ky + 22.0, 5.0, (1.0, 1.0, 1.0, 0.28), 1.0);
-            d2d.draw_text_simple(k_text, kx, ky, kx + kw, ky + 22.0, 11.0, (1.0, 1.0, 1.0, 1.0), true, true);
-            d2d.draw_text_simple(l_text, kx + kw + 8.0, ky + 2.0, kx + total_w, ky + 22.0, 11.5, (0.85, 0.88, 0.92, 1.0), false, false);
-        };
-
-        // Row 1: Shift (Vonal), Ctrl (Nyíl), Ctrl+Shift (Számozott nyíl)
-        draw_key_pill(d2d, "Shift", "Vonal", left_x + 8.0, cur_y, 48.0, 140.0);
-        draw_key_pill(d2d, "Ctrl", "Nyíl", left_x + 155.0, cur_y, 44.0, 135.0);
-        draw_key_pill(d2d, "Ctrl + Shift", "Számozott nyíl", left_x + 295.0, cur_y, 90.0, 260.0);
-        cur_y += 28.0;
-
-        // Row 2: X (Blur), R (Téglalap), C (Kör), T (Szöveg)
-        draw_key_pill(d2d, "X", "Elmosás", left_x + 8.0, cur_y, 26.0, 120.0);
-        draw_key_pill(d2d, "R", "Téglalap", left_x + 135.0, cur_y, 26.0, 120.0);
-        draw_key_pill(d2d, "C", "Kör", left_x + 265.0, cur_y, 26.0, 110.0);
-        draw_key_pill(d2d, "T", "Szöveg", left_x + 380.0, cur_y, 26.0, 110.0);
-        cur_y += 28.0;
-
-        // Row 3: S (Kivágás), I (Pipetta), P (Ceruza), Esc (Elvetés)
-        draw_key_pill(d2d, "S", "Kivágás", left_x + 8.0, cur_y, 26.0, 120.0);
-        draw_key_pill(d2d, "I", "Pipetta", left_x + 135.0, cur_y, 26.0, 120.0);
-        draw_key_pill(d2d, "P", "Ceruza", left_x + 265.0, cur_y, 26.0, 110.0);
-        draw_key_pill(d2d, "Esc", "Bezárás", left_x + 380.0, cur_y, 36.0, 130.0);
-        cur_y += 30.0;
-
-        // Tip text
-        d2d.draw_text_simple("💡 Tipp: Tartsd nyomva a billentyűt az ideiglenes rajzhoz (elengedve visszaugrik),", left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.70, 0.75, 0.82, 1.0), false, false);
-        cur_y += 18.0;
-        d2d.draw_text_simple("    vagy nyomd meg egyszer a végleges eszközváltáshoz!", left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.70, 0.75, 0.82, 1.0), false, false);
-        cur_y += 24.0;
-
-        // Separator line 2
-        d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
-        cur_y += 12.0;
-
-        // SECTION 2: Globális indítóbillentyű
-        d2d.draw_text_simple("Globális aktiváló gyorsbillentyű (Bárhonnan a rendszerből):", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
-        cur_y += 24.0;
-
-        let hotkey_options = ["Ctrl+2", "F8", "Ctrl+Alt+D", "Win+Alt+D"];
-        let btn_w = 134.0;
-        let btn_gap = 12.0;
         let start_btn_x = left_x + 8.0;
 
-        for (idx, opt) in hotkey_options.iter().enumerate() {
-            let bx1 = start_btn_x + (idx as f32) * (btn_w + btn_gap);
-            let by1 = cur_y;
-            let bx2 = bx1 + btn_w;
-            let by2 = by1 + 32.0;
+        // TAB BAR
+        let tab_w = 140.0;
+        let tab_h = 32.0;
+        let tab_gap = 10.0;
+        let tab0_x = start_btn_x;
+        let tab1_x = start_btn_x + tab_w + tab_gap;
+        let tab_y = my + 54.0;
 
-            let is_selected = self.temp_settings.global_hotkey == *opt;
-            if is_selected {
-                d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (0.04, 0.52, 1.0, 0.95));
-                d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.4), 1.2);
-                let label = format!("✓  {}", opt);
-                d2d.draw_text_simple(&label, bx1, by1, bx2, by2, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
-            } else {
-                d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.07));
-                d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.15), 1.0);
-                d2d.draw_text_simple(opt, bx1, by1, bx2, by2, 12.0, (0.85, 0.88, 0.92, 1.0), false, true);
+        let tab0_active = self.settings_tab == 0;
+        let tab0_bg = if tab0_active { (0.04, 0.52, 1.0, 0.95) } else { (1.0, 1.0, 1.0, 0.08) };
+        let tab0_border = if tab0_active { (1.0, 1.0, 1.0, 0.40) } else { (1.0, 1.0, 1.0, 0.15) };
+        d2d.fill_rounded_rectangle(tab0_x, tab_y, tab0_x + tab_w, tab_y + tab_h, 7.0, tab0_bg);
+        d2d.draw_rounded_rectangle(tab0_x, tab_y, tab0_x + tab_w, tab_y + tab_h, 7.0, tab0_border, 1.0);
+        let tab0_icon_col = if tab0_active { (1.0, 1.0, 1.0, 1.0) } else { (0.75, 0.78, 0.85, 1.0) };
+        d2d.draw_gear_icon(tab0_x + 18.0, tab_y + tab_h / 2.0, tab0_icon_col, 1.3);
+        d2d.draw_text_simple(lang.settings_tab_general(), tab0_x + 30.0, tab_y, tab0_x + tab_w - 6.0, tab_y + tab_h, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+
+        let tab1_active = self.settings_tab == 1;
+        let tab1_bg = if tab1_active { (0.04, 0.52, 1.0, 0.95) } else { (1.0, 1.0, 1.0, 0.08) };
+        let tab1_border = if tab1_active { (1.0, 1.0, 1.0, 0.40) } else { (1.0, 1.0, 1.0, 0.15) };
+        d2d.fill_rounded_rectangle(tab1_x, tab_y, tab1_x + tab_w, tab_y + tab_h, 7.0, tab1_bg);
+        d2d.draw_rounded_rectangle(tab1_x, tab_y, tab1_x + tab_w, tab_y + tab_h, 7.0, tab1_border, 1.0);
+        let tab1_icon_col = if tab1_active { (1.0, 1.0, 1.0, 1.0) } else { (0.75, 0.78, 0.85, 1.0) };
+        d2d.draw_keyboard_icon(tab1_x + 20.0, tab_y + tab_h / 2.0, tab1_icon_col, 1.3);
+        d2d.draw_text_simple(lang.settings_tab_keybindings(), tab1_x + 32.0, tab_y, tab1_x + tab_w - 6.0, tab_y + tab_h, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+
+        // Separator line below tab bar
+        d2d.draw_line(mx + 16.0, my + 96.0, mx + mw - 16.0, my + 96.0, (1.0, 1.0, 1.0, 0.10), 1.0);
+
+        if self.settings_tab == 0 {
+            // ==================== TAB 0: GENERAL ====================
+            let mut cur_y = my + 110.0;
+
+            // SECTION 1: Nyelv / Language
+            d2d.draw_text_simple(lang.settings_section_lang(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+            cur_y += 24.0;
+
+            let lang_opts = [
+                (crate::i18n::Language::Hu, "Magyar"),
+                (crate::i18n::Language::En, "English"),
+            ];
+            let lang_btn_w = 130.0;
+            let lang_gap = 12.0;
+
+            for (idx, (l_code, l_label)) in lang_opts.iter().enumerate() {
+                let bx1 = start_btn_x + (idx as f32) * (lang_btn_w + lang_gap);
+                let by1 = cur_y;
+                let bx2 = bx1 + lang_btn_w;
+                let by2 = by1 + 32.0;
+
+                let is_selected = self.temp_settings.language == *l_code;
+                if is_selected {
+                    d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (0.04, 0.52, 1.0, 0.95));
+                    d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.4), 1.2);
+                    d2d.draw_checkmark_icon(bx1 + 18.0, (by1 + by2) / 2.0, 7.0, (1.0, 1.0, 1.0, 1.0), 1.8);
+                    d2d.draw_text_simple(l_label, bx1 + 28.0, by1, bx2, by2, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+                } else {
+                    d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.07));
+                    d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.15), 1.0);
+                    d2d.draw_text_simple(l_label, bx1, by1, bx2, by2, 12.0, (0.85, 0.88, 0.92, 1.0), false, true);
+                }
             }
-        }
-        cur_y += 44.0;
+            cur_y += 52.0;
 
-        // Separator line 3
-        d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
-        cur_y += 12.0;
+            // Separator line 1
+            d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
+            cur_y += 14.0;
 
-        // SECTION 3: Rendszer beállítások
-        d2d.draw_text_simple("Rendszer és Indítás:", left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
-        cur_y += 24.0;
+            // SECTION 2: Globális indítóbillentyű
+            d2d.draw_text_simple(lang.settings_section_hotkey(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+            cur_y += 24.0;
 
-        // Toggle 1: Autostart
-        let check_box_size = 18.0;
-        let cb_y = cur_y + 2.0;
-        if self.temp_settings.autostart {
-            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
-            d2d.draw_text_simple("✓", left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+            let hotkey_options = ["Ctrl+2", "F8", "Ctrl+Alt+D", "Win+Alt+D"];
+            let btn_w = 134.0;
+            let btn_gap = 12.0;
+
+            for (idx, opt) in hotkey_options.iter().enumerate() {
+                let bx1 = start_btn_x + (idx as f32) * (btn_w + btn_gap);
+                let by1 = cur_y;
+                let bx2 = bx1 + btn_w;
+                let by2 = by1 + 32.0;
+
+                let is_selected = self.temp_settings.global_hotkey == *opt;
+                if is_selected {
+                    d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (0.04, 0.52, 1.0, 0.95));
+                    d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.4), 1.2);
+                    d2d.draw_checkmark_icon(bx1 + 16.0, (by1 + by2) / 2.0, 7.0, (1.0, 1.0, 1.0, 1.0), 1.8);
+                    d2d.draw_text_simple(opt, bx1 + 24.0, by1, bx2, by2, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+                } else {
+                    d2d.fill_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.07));
+                    d2d.draw_rounded_rectangle(bx1, by1, bx2, by2, 8.0, (1.0, 1.0, 1.0, 0.15), 1.0);
+                    d2d.draw_text_simple(opt, bx1, by1, bx2, by2, 12.0, (0.85, 0.88, 0.92, 1.0), false, true);
+                }
+            }
+            cur_y += 52.0;
+
+            // Separator line 2
+            d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
+            cur_y += 14.0;
+
+            // SECTION 3: Rendszer beállítások
+            d2d.draw_text_simple(lang.settings_section_system(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+            cur_y += 24.0;
+
+            // Toggle 1: Autostart
+            let check_box_size = 18.0;
+            let cb_y = cur_y + 2.0;
+            if self.temp_settings.autostart {
+                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
+                d2d.draw_checkmark_icon(left_x + 8.0 + check_box_size / 2.0, cb_y + check_box_size / 2.0, 8.0, (1.0, 1.0, 1.0, 1.0), 1.8);
+            } else {
+                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
+                d2d.draw_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+            }
+            d2d.draw_text_simple(lang.settings_autostart(), left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
+            cur_y += 34.0;
+
+            // Toggle 2: Auto check update
+            let cb_y2 = cur_y + 2.0;
+            if self.temp_settings.check_updates {
+                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
+                d2d.draw_checkmark_icon(left_x + 8.0 + check_box_size / 2.0, cb_y2 + check_box_size / 2.0, 8.0, (1.0, 1.0, 1.0, 1.0), 1.8);
+            } else {
+                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
+                d2d.draw_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+            }
+            d2d.draw_text_simple(lang.settings_check_updates(), left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
+            cur_y += 44.0;
+
+            d2d.draw_text_simple(lang.settings_portable_note(), left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.60, 0.64, 0.72, 1.0), false, false);
         } else {
-            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
-            d2d.draw_rounded_rectangle(left_x + 8.0, cb_y, left_x + 8.0 + check_box_size, cb_y + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+            // ==================== TAB 1: KEYBINDINGS ====================
+            let cur_y = my + 108.0;
+            d2d.draw_text_simple(lang.settings_kb_title(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+
+            let banner_y = cur_y + 22.0;
+            if let Some(tool) = self.rebinding_tool {
+                let msg = lang.settings_kb_rebinding_hint(tool.label(lang));
+                d2d.fill_rounded_rectangle(left_x + 8.0, banner_y, right_x, banner_y + 26.0, 6.0, (1.0, 0.55, 0.0, 0.25));
+                d2d.draw_rounded_rectangle(left_x + 8.0, banner_y, right_x, banner_y + 26.0, 6.0, (1.0, 0.65, 0.0, 0.8), 1.2);
+                d2d.draw_text_simple(&msg, left_x + 16.0, banner_y, right_x - 16.0, banner_y + 26.0, 11.5, (1.0, 0.85, 0.4, 1.0), true, false);
+            } else {
+                d2d.draw_text_simple(lang.settings_kb_desc(), left_x + 8.0, banner_y + 4.0, right_x, banner_y + 24.0, 11.0, (0.70, 0.75, 0.82, 1.0), false, false);
+            }
+
+            let col1_x = start_btn_x;
+            let col_w = 280.0;
+            let col2_x = start_btn_x + col_w + 16.0;
+            let grid_y = my + 166.0;
+            let row_h = 36.0;
+
+            let col1_tools = [
+                ToolMode::Freehand,
+                ToolMode::Line,
+                ToolMode::Arrow,
+                ToolMode::Rectangle,
+                ToolMode::FilledRectangle,
+                ToolMode::Circle,
+            ];
+            let col2_tools = [
+                ToolMode::NumberedBadge,
+                ToolMode::Curve,
+                ToolMode::Text,
+                ToolMode::Blur,
+                ToolMode::Snip,
+                ToolMode::Pipette,
+            ];
+
+            let draw_tool_card = |d2d: &D2DContext, t: ToolMode, x1: f32, y1: f32, w: f32, is_rebind: bool| {
+                let x2 = x1 + w;
+                let y2 = y1 + 30.0;
+
+                // Card background
+                d2d.fill_rounded_rectangle(x1, y1, x2, y2, 6.0, (1.0, 1.0, 1.0, 0.05));
+                d2d.draw_rounded_rectangle(x1, y1, x2, y2, 6.0, (1.0, 1.0, 1.0, 0.10), 1.0);
+
+                // Vector Icon
+                let icon_cx = x1 + 18.0;
+                let icon_cy = (y1 + y2) / 2.0;
+                let icon_col = if is_rebind { (1.0, 0.65, 0.0, 1.0) } else { (0.22, 0.74, 0.97, 1.0) };
+                t.draw_icon(d2d, icon_cx, icon_cy, icon_col, 1.4);
+
+                // Label
+                let label = t.label(lang);
+                d2d.draw_text_simple(label, x1 + 36.0, y1, x2 - 52.0, y2, 12.0, (0.90, 0.92, 0.96, 1.0), false, false);
+
+                // Key button pill
+                let pill_x1 = x2 - 46.0;
+                let pill_x2 = x2 - 6.0;
+                let pill_y1 = y1 + 3.0;
+                let pill_y2 = y2 - 3.0;
+
+                if is_rebind {
+                    d2d.fill_rounded_rectangle(pill_x1, pill_y1, pill_x2, pill_y2, 5.0, (1.0, 0.55, 0.0, 0.95));
+                    d2d.draw_rounded_rectangle(pill_x1, pill_y1, pill_x2, pill_y2, 5.0, (1.0, 1.0, 1.0, 0.8), 1.2);
+                    d2d.draw_text_simple("?", pill_x1, pill_y1, pill_x2, pill_y2, 12.5, (1.0, 1.0, 1.0, 1.0), true, true);
+                } else {
+                    d2d.fill_rounded_rectangle(pill_x1, pill_y1, pill_x2, pill_y2, 5.0, (1.0, 1.0, 1.0, 0.14));
+                    d2d.draw_rounded_rectangle(pill_x1, pill_y1, pill_x2, pill_y2, 5.0, (1.0, 1.0, 1.0, 0.28), 1.0);
+                    let key_str = self.temp_settings.keybindings.get_key(t).to_string();
+                    d2d.draw_text_simple(&key_str, pill_x1, pill_y1, pill_x2, pill_y2, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
+                }
+            };
+
+            for (i, &t) in col1_tools.iter().enumerate() {
+                let ry1 = grid_y + (i as f32) * row_h;
+                draw_tool_card(d2d, t, col1_x, ry1, col_w, self.rebinding_tool == Some(t));
+            }
+            for (i, &t) in col2_tools.iter().enumerate() {
+                let ry1 = grid_y + (i as f32) * row_h;
+                draw_tool_card(d2d, t, col2_x, ry1, col_w, self.rebinding_tool == Some(t));
+            }
+
+            // Separator line below grid
+            d2d.draw_line(mx + 20.0, my + 392.0, mx + mw - 20.0, my + 392.0, (1.0, 1.0, 1.0, 0.08), 1.0);
+
+            // Spring notes
+            d2d.draw_text_simple(lang.settings_kb_spring_note(), left_x + 8.0, my + 402.0, right_x, my + 418.0, 11.0, (0.75, 0.80, 0.88, 1.0), false, false);
+            d2d.draw_text_simple(lang.settings_tip_1(), left_x + 8.0, my + 422.0, right_x, my + 438.0, 11.0, (0.65, 0.70, 0.78, 1.0), false, false);
+            d2d.draw_text_simple(lang.settings_tip_2(), left_x + 8.0, my + 438.0, right_x, my + 454.0, 11.0, (0.65, 0.70, 0.78, 1.0), false, false);
+
+            // Reset button
+            let reset_y = my + 472.0;
+            let reset_w = 260.0;
+            d2d.fill_rounded_rectangle(start_btn_x, reset_y, start_btn_x + reset_w, reset_y + 32.0, 6.0, (1.0, 1.0, 1.0, 0.08));
+            d2d.draw_rounded_rectangle(start_btn_x, reset_y, start_btn_x + reset_w, reset_y + 32.0, 6.0, (1.0, 1.0, 1.0, 0.18), 1.0);
+            d2d.draw_refresh_icon(start_btn_x + 18.0, reset_y + 16.0, (0.85, 0.88, 0.94, 1.0), 1.4);
+            d2d.draw_text_simple(lang.settings_kb_reset_btn(), start_btn_x + 28.0, reset_y, start_btn_x + reset_w, reset_y + 32.0, 11.5, (0.85, 0.88, 0.94, 1.0), true, true);
         }
-        d2d.draw_text_simple("Indítás a Windows-zal (Autostart a tálcán a háttérben)", left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
-        cur_y += 32.0;
 
-        // Toggle 2: Auto check update
-        let cb_y2 = cur_y + 2.0;
-        if self.temp_settings.check_updates {
-            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
-            d2d.draw_text_simple("✓", left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 12.0, (1.0, 1.0, 1.0, 1.0), true, true);
-        } else {
-            d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
-            d2d.draw_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
-        }
-        d2d.draw_text_simple("Frissítések automatikus keresése indításkor (GitHub Releases)", left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
-        cur_y += 34.0;
-
-        d2d.draw_text_simple("A beállítások automatikusan hordozható formátumban (settings.json) tárolódnak.", left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.60, 0.64, 0.72, 1.0), false, false);
-
-        // Action button "Mentés és Bezárás"
+        // Action button "Mentés és Bezárás" / "Save & Close"
         let is_act_hov = self.hovered_modal_btn == Some(ModalButton::Action);
         let act_bg = if is_act_hov { (0.04, 0.52, 1.0, 1.0) } else { (0.04, 0.52, 1.0, 0.90) };
         d2d.fill_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, act_bg);
         d2d.draw_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, (1.0, 1.0, 1.0, 0.35), 1.0);
-        d2d.draw_text_simple("Mentés és Bezárás", act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
+        d2d.draw_text_simple(lang.settings_btn_save(), act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
     }
 
     fn render_about_modal(&self, d2d: &D2DContext) {
@@ -1094,6 +1325,7 @@ impl OverlayState {
 
         let (mx, my, mx2, my2) = card;
         let mw = mx2 - mx;
+        let lang = self.temp_settings.language;
 
         // 1. Semi-transparent dark overlay dimming
         d2d.fill_rectangle(0.0, 0.0, self.capture.width as f32, self.capture.height as f32, (0.0, 0.0, 0.0, 0.55));
@@ -1108,7 +1340,7 @@ impl OverlayState {
 
         // 4. Header title & close button
         d2d.draw_info_icon(mx + 30.0, my + 25.0, (0.22, 0.74, 0.97, 1.0), 1.6);
-        d2d.draw_text_simple("DrawIt – Névjegy", mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
+        d2d.draw_text_simple(lang.about_title(), mx + 44.0, my + 12.0, mx + mw - 50.0, my + 38.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
 
         let is_close_hov = self.hovered_modal_btn == Some(ModalButton::Close);
         let close_cx = (close.0 + close.2) / 2.0;
@@ -1126,30 +1358,24 @@ impl OverlayState {
         // Logo & Title (Vector SVG direct render)
         d2d.draw_svg_logo(mx + 22.0, my + 58.0, mx + 68.0, my + 104.0);
         d2d.draw_text_simple(concat!("DrawIt v", env!("CARGO_PKG_VERSION")), mx + 78.0, my + 62.0, mx + mw - 20.0, my + 84.0, 15.0, (1.0, 1.0, 1.0, 1.0), true, false);
-        d2d.draw_text_simple("Gyors, hordozható képernyőrajzoló és annotáló segédprogram", mx + 78.0, my + 85.0, mx + mw - 20.0, my + 104.0, 11.5, (0.75, 0.78, 0.84, 1.0), false, false);
+        d2d.draw_text_simple(lang.about_subtitle(), mx + 78.0, my + 85.0, mx + mw - 20.0, my + 104.0, 11.5, (0.75, 0.78, 0.84, 1.0), false, false);
 
         // Divider
         d2d.draw_line(mx + 20.0, my + 116.0, mx + mw - 20.0, my + 116.0, (1.0, 1.0, 1.0, 0.08), 1.0);
 
         // Feature bullet points
-        let bullets = [
-            "• 100% natív Rust kód hardveres Direct2D gyorsítással",
-            "• Azonnali indulás, elhanyagolható memóriahasználat (~15-25 MB)",
-            "• Nem igényel telepítést, .NET keretrendszert vagy admin jogot",
-            "• Többmonitoros intelligens elhelyezés és kijelző-mentés",
-        ];
         let mut cur_y = my + 128.0;
-        for b in bullets {
+        for b in lang.about_bullets() {
             d2d.draw_text_simple(b, mx + 24.0, cur_y, mx + mw - 24.0, cur_y + 18.0, 11.5, (0.85, 0.88, 0.92, 1.0), false, false);
             cur_y += 22.0;
         }
 
-        // Action button "Bezárás"
+        // Action button "Bezárás" / "Close"
         let is_act_hov = self.hovered_modal_btn == Some(ModalButton::Action);
         let act_bg = if is_act_hov { (0.04, 0.52, 1.0, 1.0) } else { (0.04, 0.52, 1.0, 0.88) };
         d2d.fill_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, act_bg);
         d2d.draw_rounded_rectangle(act.0, act.1, act.2, act.3, 8.0, (1.0, 1.0, 1.0, 0.3), 1.0);
-        d2d.draw_text_simple("Bezárás", act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
+        d2d.draw_text_simple(lang.about_btn_close(), act.0, act.1, act.2, act.3, 13.0, (1.0, 1.0, 1.0, 1.0), true, true);
     }
 
     fn render_badge(&self, d2d: &D2DContext, cx: f32, cy: f32, number: usize, color: (f32, f32, f32, f32), thickness: f32) {
@@ -1262,7 +1488,12 @@ impl OverlayState {
                     } else {
                         (sw / 2.0, 90.0)
                     };
-                    d2d.draw_text_simple("Jelölje ki a kívánt területet az egér húzásával...", cx - 250.0, top_y, cx + 250.0, top_y + 40.0, 16.0, (1.0, 1.0, 1.0, 0.9), true, true);
+                    let hint = if self.toolbar.language == crate::i18n::Language::Hu {
+                        "Jelölje ki a kívánt területet az egér húzásával..."
+                    } else {
+                        "Click and drag to select a region to snip..."
+                    };
+                    d2d.draw_text_simple(hint, cx - 250.0, top_y, cx + 250.0, top_y + 40.0, 16.0, (1.0, 1.0, 1.0, 0.9), true, true);
                     return;
                 }
             }
@@ -1313,7 +1544,7 @@ impl OverlayState {
                         d2d.fill_rounded_rectangle(btn_l, btn_t, btn_r, btn_b, 7.0, bg);
                         d2d.draw_rounded_rectangle(btn_l, btn_t, btn_r, btn_b, 7.0, border, 1.2);
                         d2d.draw_clipboard_icon(btn_l + 16.0, (btn_t + btn_b) / 2.0, col, 1.5);
-                        d2d.draw_text_simple("Másolás", btn_l + 26.0, btn_t, btn_r - 4.0, btn_b, 12.0, col, is_hov, true);
+                        d2d.draw_text_simple(self.toolbar.language.snip_copy(), btn_l + 26.0, btn_t, btn_r - 4.0, btn_b, 12.0, col, is_hov, true);
                     }
                     SnipAction::SavePng => {
                         let (bg, border, col) = if is_hov {
@@ -1346,7 +1577,7 @@ impl OverlayState {
                         d2d.fill_rounded_rectangle(btn_l, btn_t, btn_r, btn_b, 7.0, bg);
                         d2d.draw_rounded_rectangle(btn_l, btn_t, btn_r, btn_b, 7.0, border, 1.2);
                         d2d.draw_close_icon(btn_l + 16.0, (btn_t + btn_b) / 2.0, 4.0, col, 1.5);
-                        d2d.draw_text_simple("Mégse", btn_l + 26.0, btn_t, btn_r - 4.0, btn_b, 12.0, col, is_hov, true);
+                        d2d.draw_text_simple(self.toolbar.language.snip_cancel(), btn_l + 26.0, btn_t, btn_r - 4.0, btn_b, 12.0, col, is_hov, true);
                     }
                 }
             }
@@ -1377,17 +1608,22 @@ impl OverlayState {
         let full_w = self.capture.width;
         let full_h = self.capture.height;
 
-        let cx = sl.round().max(0.0) as u32;
-        let cy = st.round().max(0.0) as u32;
-        let cw = (sr - sl).abs().round().max(1.0) as u32;
-        let ch = (sb - st).abs().round().max(1.0) as u32;
+        let x1 = sl.min(sr);
+        let x2 = sl.max(sr);
+        let y1 = st.min(sb);
+        let y2 = st.max(sb);
+
+        let cx = x1.round().clamp(0.0, (full_w.saturating_sub(1)) as f32) as u32;
+        let cy = y1.round().clamp(0.0, (full_h.saturating_sub(1)) as f32) as u32;
+        let cw = (x2 - x1).round().clamp(1.0, (full_w.saturating_sub(cx)) as f32) as u32;
+        let ch = (y2 - y1).round().clamp(1.0, (full_h.saturating_sub(cy)) as f32) as u32;
 
         let cropped_bgra = crop_bgra(&full_bgra, full_w, full_h, cx, cy, cw, ch);
 
         match act {
             SnipAction::Copy => {
                 copy_bgra_to_clipboard(self.hwnd, cw, ch, &cropped_bgra);
-                self.show_toast("✓ Kivágott terület másolva a vágólapra!");
+                self.show_toast(self.toolbar.language.toast_snip_copied());
                 self.snip_rect = None;
                 self.hovered_snip_action = None;
                 self.toolbar.active_tool = ToolMode::Freehand;
@@ -1395,12 +1631,12 @@ impl OverlayState {
             }
             SnipAction::SavePng => {
                 let rgba = bgra_to_rgba(&cropped_bgra);
-                let def_name = format!("Kivagas_{}.png", chrono_timestamp());
+                let def_name = self.toolbar.language.default_snip_name(&chrono_timestamp());
                 let anchor = create_anchor_for_monitor_by_cursor(&self.capture, self.hwnd);
                 let saved = save_png_dialog(anchor, &def_name, cw, ch, &rgba);
                 unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(anchor); }
                 if saved.is_some() {
-                    self.show_toast("✓ Kivágás elmentve PNG fájlba!");
+                    self.show_toast(self.toolbar.language.toast_snip_saved_png());
                 }
                 self.snip_rect = None;
                 self.hovered_snip_action = None;
@@ -1409,12 +1645,12 @@ impl OverlayState {
             }
             SnipAction::SavePdf => {
                 let rgba = bgra_to_rgba(&cropped_bgra);
-                let def_name = format!("Kivagas_{}.pdf", chrono_timestamp());
+                let def_name = self.toolbar.language.default_snip_pdf_name(&chrono_timestamp());
                 let anchor = create_anchor_for_monitor_by_cursor(&self.capture, self.hwnd);
                 let saved = save_pdf_dialog(anchor, &def_name, cw, ch, &rgba);
                 unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::DestroyWindow(anchor); }
                 if saved.is_some() {
-                    self.show_toast("✓ Kivágás elmentve PDF fájlba!");
+                    self.show_toast(self.toolbar.language.toast_snip_saved_pdf());
                 }
                 self.snip_rect = None;
                 self.hovered_snip_action = None;
@@ -1422,7 +1658,7 @@ impl OverlayState {
                 true
             }
             SnipAction::Cancel => {
-                self.show_toast("Képmetszés megszakítva");
+                self.show_toast(self.toolbar.language.toast_snip_cancelled());
                 self.snip_rect = None;
                 self.hovered_snip_action = None;
                 self.toolbar.active_tool = ToolMode::Freehand;
@@ -1441,14 +1677,17 @@ fn chrono_timestamp() -> String {
 }
 
 fn handle_escape_press(state: &mut OverlayState) {
-    if state.active_modal != ActiveModal::None {
+    if state.rebinding_tool.is_some() {
+        state.rebinding_tool = None;
+        state.render();
+    } else if state.active_modal != ActiveModal::None {
         state.active_modal = ActiveModal::None;
         state.hovered_modal_btn = None;
         state.render();
     } else if state.toolbar.active_tool == ToolMode::Pipette {
         state.toolbar.active_tool = state.previous_tool_before_pipette;
         state.pipette_buffer = None;
-        state.show_toast("Pipetta megszakítva");
+        state.show_toast(state.toolbar.language.toast_pipette_cancelled());
         state.render();
     } else if state.toolbar.dismiss_popup() {
         state.render();
@@ -1514,9 +1753,9 @@ pub unsafe extern "system" fn overlay_wndproc(
 
             if state.toolbar.active_tool == ToolMode::Text || state.text_pos.is_some() {
                 let font_size = state.toolbar.thickness * 3.5 + 14.0;
-                state.show_toast(&format!("Betűméret: {:.0} pt  |  Vonalvastagság: {:.0} px", font_size, state.toolbar.thickness));
+                state.show_toast(&state.toolbar.language.toast_stroke_font_size(state.toolbar.thickness, font_size));
             } else {
-                state.show_toast(&format!("Vonalvastagság: {:.0} px", state.toolbar.thickness));
+                state.show_toast(&state.toolbar.language.toast_stroke_size(state.toolbar.thickness));
             }
             state.render();
             LRESULT(0)
@@ -1748,6 +1987,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                     if mx >= close.0 && mx <= close.2 && my >= close.1 && my <= close.3 {
                         state.active_modal = ActiveModal::None;
                         state.hovered_modal_btn = None;
+                        state.rebinding_tool = None;
                         state.render();
                         return LRESULT(0);
                     }
@@ -1756,36 +1996,78 @@ pub unsafe extern "system" fn overlay_wndproc(
                     if mx >= act.0 && mx <= act.2 && my >= act.1 && my <= act.3 {
                         if state.active_modal == ActiveModal::Settings {
                             crate::settings::save_settings(&state.temp_settings);
-                            state.show_toast("✓ Beállítások elmentve");
+                            state.toolbar.language = state.temp_settings.language;
+                            state.show_toast(state.temp_settings.language.toast_settings_saved());
                         }
                         state.active_modal = ActiveModal::None;
                         state.hovered_modal_btn = None;
+                        state.rebinding_tool = None;
                         state.render();
                         return LRESULT(0);
                     }
 
                     // Settings modal controls
                     if state.active_modal == ActiveModal::Settings {
-                        if let Some((hk_rects, auto_r, upd_r)) = state.get_settings_controls() {
-                            let clicked_opt = hk_rects.iter()
+                        if let Some(ctrls) = state.get_settings_controls() {
+                            // Check tab switch clicks
+                            let clicked_tab = ctrls.tab_rects.iter()
                                 .find(|(_, r)| mx >= r.0 && mx <= r.2 && my >= r.1 && my <= r.3)
-                                .map(|(opt, _)| opt.clone());
-                            if let Some(opt) = clicked_opt {
-                                state.temp_settings.global_hotkey = opt;
+                                .map(|(t, _)| *t);
+                            if let Some(t) = clicked_tab {
+                                state.settings_tab = t;
+                                state.rebinding_tool = None;
                                 state.render();
                                 return LRESULT(0);
                             }
 
-                            if mx >= auto_r.0 && mx <= auto_r.2 && my >= auto_r.1 && my <= auto_r.3 {
-                                state.temp_settings.autostart = !state.temp_settings.autostart;
-                                state.render();
-                                return LRESULT(0);
-                            }
+                            if state.settings_tab == 0 {
+                                let clicked_lang = ctrls.lang_rects.iter()
+                                    .find(|(_, r)| mx >= r.0 && mx <= r.2 && my >= r.1 && my <= r.3)
+                                    .map(|(l, _)| *l);
+                                if let Some(l) = clicked_lang {
+                                    state.temp_settings.language = l;
+                                    state.render();
+                                    return LRESULT(0);
+                                }
 
-                            if mx >= upd_r.0 && mx <= upd_r.2 && my >= upd_r.1 && my <= upd_r.3 {
-                                state.temp_settings.check_updates = !state.temp_settings.check_updates;
-                                state.render();
-                                return LRESULT(0);
+                                let clicked_opt = ctrls.hk_rects.iter()
+                                    .find(|(_, r)| mx >= r.0 && mx <= r.2 && my >= r.1 && my <= r.3)
+                                    .map(|(opt, _)| opt.clone());
+                                if let Some(opt) = clicked_opt {
+                                    state.temp_settings.global_hotkey = opt;
+                                    state.render();
+                                    return LRESULT(0);
+                                }
+
+                                if mx >= ctrls.auto_r.0 && mx <= ctrls.auto_r.2 && my >= ctrls.auto_r.1 && my <= ctrls.auto_r.3 {
+                                    state.temp_settings.autostart = !state.temp_settings.autostart;
+                                    state.render();
+                                    return LRESULT(0);
+                                }
+
+                                if mx >= ctrls.upd_r.0 && mx <= ctrls.upd_r.2 && my >= ctrls.upd_r.1 && my <= ctrls.upd_r.3 {
+                                    state.temp_settings.check_updates = !state.temp_settings.check_updates;
+                                    state.render();
+                                    return LRESULT(0);
+                                }
+                            } else {
+                                // Tab 1: Keybindings
+                                let clicked_tool = ctrls.tool_key_rects.iter()
+                                    .find(|(_, r)| mx >= r.0 && mx <= r.2 && my >= r.1 && my <= r.3)
+                                    .map(|(t, _)| *t);
+                                if let Some(tool) = clicked_tool {
+                                    state.rebinding_tool = Some(tool);
+                                    state.render();
+                                    return LRESULT(0);
+                                }
+
+                                if mx >= ctrls.reset_kb_r.0 && mx <= ctrls.reset_kb_r.2 && my >= ctrls.reset_kb_r.1 && my <= ctrls.reset_kb_r.3 {
+                                    state.temp_settings.keybindings = crate::models::ToolKeybindings::default();
+                                    state.rebinding_tool = None;
+                                    state.show_toast(state.temp_settings.language.toast_kb_reset());
+                                    state.render();
+                                    return LRESULT(0);
+                                }
                             }
                         }
                     }
@@ -1797,6 +2079,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                     // Click outside card (backdrop dismiss)
                     state.active_modal = ActiveModal::None;
                     state.hovered_modal_btn = None;
+                    state.rebinding_tool = None;
                     state.render();
                     return LRESULT(0);
                 }
@@ -1809,7 +2092,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                 let prev_tool = state.previous_tool_before_pipette;
                 state.toolbar.active_tool = prev_tool;
                 state.pipette_buffer = None;
-                state.show_toast(&format!("✓ Szín mintavételezve: #{:02X}{:02X}{:02X} ({})", r, g, b, prev_tool.label_hu()));
+                state.show_toast(&state.toolbar.language.toast_pipette_sampled(r, g, b, prev_tool.label(state.toolbar.language)));
                 state.render();
                 return LRESULT(0);
             }
@@ -1833,7 +2116,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                     opacity: state.toolbar.opacity,
                 });
                 state.curve_phase = CurvePhase::Idle;
-                state.show_toast("✓ Ív rögzítve");
+                state.show_toast(state.toolbar.language.toast_curve_locked());
                 state.render();
                 return LRESULT(0);
             }
@@ -1874,10 +2157,10 @@ pub unsafe extern "system" fn overlay_wndproc(
                     state.commit_text_if_any();
                     if mode == ToolMode::Rectangle && state.toolbar.active_tool == ToolMode::Rectangle {
                         state.toolbar.active_tool = ToolMode::FilledRectangle;
-                        state.show_toast("■ Takarás (kitöltött téglalap) kiválasztva");
+                        state.show_toast(state.toolbar.language.toast_filled_rect_selected());
                     } else if mode == ToolMode::FilledRectangle && state.toolbar.active_tool == ToolMode::FilledRectangle {
                         state.toolbar.active_tool = ToolMode::Rectangle;
-                        state.show_toast("▭ Téglalap (körvonal) kiválasztva");
+                        state.show_toast(state.toolbar.language.toast_rect_selected());
                     } else {
                         state.toolbar.active_tool = mode;
                     }
@@ -1903,7 +2186,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                 HitTestResult::Item(ToolbarItem::Undo) => {
                     if !state.history.actions.is_empty() {
                         state.history.undo();
-                        state.show_toast("↶ Visszavonás");
+                        state.show_toast(state.toolbar.language.toast_undo());
                         state.render();
                     }
                     return LRESULT(0);
@@ -1912,7 +2195,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                 HitTestResult::Item(ToolbarItem::Redo) => {
                     if !state.history.redo_stack.is_empty() {
                         state.history.redo();
-                        state.show_toast("↷ Újra");
+                        state.show_toast(state.toolbar.language.toast_redo());
                         state.render();
                     }
                     return LRESULT(0);
@@ -1925,7 +2208,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                     state.text_buffer.clear();
                     state.snip_rect = None;
                     state.curve_phase = CurvePhase::Idle;
-                    state.show_toast("✓ Rajzok törölve (Tiszta vászon)");
+                    state.show_toast(state.toolbar.language.toast_clear());
                     state.render();
                     return LRESULT(0);
                 }
@@ -1978,6 +2261,8 @@ pub unsafe extern "system" fn overlay_wndproc(
                         PopupAction::Settings => {
                             state.toolbar.dismiss_popup();
                             state.temp_settings = crate::settings::load_settings();
+                            state.settings_tab = 0;
+                            state.rebinding_tool = None;
                             state.active_modal = ActiveModal::Settings;
                             state.hovered_modal_btn = None;
                             state.render();
@@ -1997,7 +2282,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                         }
                         PopupAction::SelectColor(rgb) => {
                             state.toolbar.set_color_rgb(rgb);
-                            state.show_toast("✓ Szín kiválasztva");
+                            state.show_toast(state.toolbar.language.toast_color_selected());
                         }
                         PopupAction::HueBar(frac) => {
                             state.is_dragging_hue = true;
@@ -2022,32 +2307,26 @@ pub unsafe extern "system" fn overlay_wndproc(
                             state.toolbar.dismiss_popup();
                             state.pipette_buffer = Some(state.capture_rendered_canvas());
                             state.toolbar.active_tool = ToolMode::Pipette;
-                            state.show_toast("💧 Pipetta: Kattints a képernyőre a szín mintavételezéséhez! (Esc: mégse)");
+                            state.show_toast(state.toolbar.language.toast_pipette_prompt());
                             state.render();
                             return LRESULT(0);
                         }
                         PopupAction::SelectOpacity(op) => {
                             state.toolbar.opacity = op;
                             let pct = (op * 100.0).round() as i32;
-                            state.show_toast(&format!("Átlátszatlanság: {}%", pct));
+                            state.show_toast(&state.toolbar.language.toast_opacity(pct));
                         }
                         PopupAction::SelectThickness(th) => {
                             state.toolbar.thickness = th;
-                            state.show_toast(&format!("Vonalvastagság: {:.0} px", th));
+                            state.show_toast(&state.toolbar.language.toast_stroke_size(th));
                         }
                         PopupAction::AdjustThickness(delta) => {
                             state.toolbar.thickness = (state.toolbar.thickness + delta).clamp(1.0, 32.0);
-                            state.show_toast(&format!("Vonalvastagság: {:.0} px", state.toolbar.thickness));
+                            state.show_toast(&state.toolbar.language.toast_stroke_size(state.toolbar.thickness));
                         }
                         PopupAction::SelectCanvasMode(mode) => {
                             state.toolbar.canvas_mode = mode;
-                            let label = match mode {
-                                CanvasMode::Transparent => "Átlátszó képernyő",
-                                CanvasMode::Blurred => "Elmosott kijelző háttér",
-                                CanvasMode::Whiteboard => "Fehér tábla mód",
-                                CanvasMode::Blackboard => "Fekete tábla mód",
-                            };
-                            state.show_toast(label);
+                            state.show_toast(mode.label(state.toolbar.language));
                             state.toolbar.dismiss_popup();
                         }
                         PopupAction::SaveMonitorPng(idx) => {
@@ -2218,7 +2497,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                                 start: state.draw_start,
                                 end: (mx, my),
                             };
-                            state.show_toast("Mozgasd az egeret az ív hajlításához, majd kattints a rögzítéshez!");
+                            state.show_toast(state.toolbar.language.toast_curve_bending());
                         }
                     }
                     ToolMode::Blur => {
@@ -2300,14 +2579,36 @@ pub unsafe extern "system" fn overlay_wndproc(
                 return LRESULT(0);
             }
 
-            // Enter key saves in Settings modal
-            if state.active_modal == ActiveModal::Settings && key == 0x0D /* VK_RETURN */ {
-                crate::settings::save_settings(&state.temp_settings);
-                state.show_toast("✓ Beállítások elmentve");
-                state.active_modal = ActiveModal::None;
-                state.hovered_modal_btn = None;
-                state.render();
-                return LRESULT(0);
+            // Settings modal key handling
+            if state.active_modal == ActiveModal::Settings {
+                if let Some(tool) = state.rebinding_tool {
+                    if key == VK_ESCAPE.0 as u32 {
+                        state.rebinding_tool = None;
+                        state.render();
+                        return LRESULT(0);
+                    }
+                    if (key >= 0x41 && key <= 0x5A) || (key >= 0x30 && key <= 0x39) {
+                        let ch = (key as u8) as char;
+                        state.temp_settings.keybindings.set_key(tool, ch);
+                        let tool_name = tool.label(state.temp_settings.language);
+                        state.show_toast(&state.temp_settings.language.toast_kb_rebound(ch, tool_name));
+                        state.rebinding_tool = None;
+                        state.render();
+                        return LRESULT(0);
+                    }
+                    return LRESULT(0);
+                }
+
+                // Enter key saves in Settings modal
+                if key == 0x0D /* VK_RETURN */ {
+                    crate::settings::save_settings(&state.temp_settings);
+                    state.toolbar.language = state.temp_settings.language;
+                    state.show_toast(state.temp_settings.language.toast_settings_saved());
+                    state.active_modal = ActiveModal::None;
+                    state.hovered_modal_btn = None;
+                    state.render();
+                    return LRESULT(0);
+                }
             }
 
             // If any modal is active, suppress tool switching shortcuts
@@ -2327,7 +2628,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                 state.text_buffer.clear();
                 state.snip_rect = None;
                 state.curve_phase = CurvePhase::Idle;
-                state.show_toast("✓ Rajzok törölve (Tiszta vászon)");
+                state.show_toast(state.toolbar.language.toast_clear());
                 state.render();
                 return LRESULT(0);
             }
@@ -2337,7 +2638,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                 if key == 'Z' as u32 {
                     state.ctrl_used_for_shortcut = true;
                     state.history.undo();
-                    state.show_toast("↶ Visszavonás");
+                    state.show_toast(state.toolbar.language.toast_undo());
                     if state.active_spring_tool == Some(ToolMode::Arrow) || state.active_spring_tool == Some(ToolMode::NumberedBadge) {
                         state.toolbar.active_tool = state.base_tool;
                         state.active_spring_tool = None;
@@ -2348,7 +2649,7 @@ pub unsafe extern "system" fn overlay_wndproc(
                 if key == 'Y' as u32 {
                     state.ctrl_used_for_shortcut = true;
                     state.history.redo();
-                    state.show_toast("↷ Újra");
+                    state.show_toast(state.toolbar.language.toast_redo());
                     if state.active_spring_tool == Some(ToolMode::Arrow) || state.active_spring_tool == Some(ToolMode::NumberedBadge) {
                         state.toolbar.active_tool = state.base_tool;
                         state.active_spring_tool = None;
@@ -2360,17 +2661,27 @@ pub unsafe extern "system" fn overlay_wndproc(
                     state.ctrl_used_for_shortcut = true;
                     if let Some(r) = state.snip_rect {
                         let full_bgra = state.capture_rendered_canvas();
+                        let full_w = state.capture.width;
+                        let full_h = state.capture.height;
+                        let x1 = r.0.min(r.2);
+                        let x2 = r.0.max(r.2);
+                        let y1 = r.1.min(r.3);
+                        let y2 = r.1.max(r.3);
+                        let cx = x1.round().clamp(0.0, (full_w.saturating_sub(1)) as f32) as u32;
+                        let cy = y1.round().clamp(0.0, (full_h.saturating_sub(1)) as f32) as u32;
+                        let cw = (x2 - x1).round().clamp(1.0, (full_w.saturating_sub(cx)) as f32) as u32;
+                        let ch = (y2 - y1).round().clamp(1.0, (full_h.saturating_sub(cy)) as f32) as u32;
                         let cropped = crop_bgra(
                             &full_bgra,
-                            state.capture.width,
-                            state.capture.height,
-                            r.0.round() as u32,
-                            r.1.round() as u32,
-                            (r.2 - r.0).round() as u32,
-                            (r.3 - r.1).round() as u32,
+                            full_w,
+                            full_h,
+                            cx,
+                            cy,
+                            cw,
+                            ch,
                         );
-                        if copy_bgra_to_clipboard(hwnd, (r.2 - r.0).round() as u32, (r.3 - r.1).round() as u32, &cropped) {
-                            state.show_toast("✓ Kivágott terület másolva a vágólapra!");
+                        if copy_bgra_to_clipboard(hwnd, cw, ch, &cropped) {
+                            state.show_toast(state.toolbar.language.toast_snip_copied());
                         }
                     } else {
                         state.export_display_action(0, "clipboard");
@@ -2431,44 +2742,34 @@ pub unsafe extern "system" fn overlay_wndproc(
 
             // In-app Tool Shortcuts (Hybrid: Hold to spring-switch / Tap to lock)
             if !ctrl_down && !alt_down {
-                // Pipette is one-shot interactive tool
-                if key == 'I' as u32 {
-                    if !is_repeat {
-                        state.previous_tool_before_pipette = if state.toolbar.active_tool != ToolMode::Pipette {
-                            state.toolbar.active_tool
-                        } else {
-                            state.base_tool
-                        };
-                        state.toolbar.dismiss_popup();
-                        state.pipette_buffer = Some(state.capture_rendered_canvas());
-                        state.toolbar.active_tool = ToolMode::Pipette;
-                        state.show_toast("💧 Pipetta: Kattints a szín mintavételezéséhez! (Esc: mégse)");
-                        state.render();
-                    }
-                    return LRESULT(0);
-                }
+                if (key >= 0x41 && key <= 0x5A) || (key >= 0x30 && key <= 0x39) {
+                    let ch = (key as u8) as char;
+                    let s = crate::settings::get_settings();
+                    if let Some(tool) = s.keybindings.get_tool(ch) {
+                        if tool == ToolMode::Pipette {
+                            if !is_repeat {
+                                state.previous_tool_before_pipette = if state.toolbar.active_tool != ToolMode::Pipette {
+                                    state.toolbar.active_tool
+                                } else {
+                                    state.base_tool
+                                };
+                                state.toolbar.dismiss_popup();
+                                state.pipette_buffer = Some(state.capture_rendered_canvas());
+                                state.toolbar.active_tool = ToolMode::Pipette;
+                                state.show_toast(state.toolbar.language.toast_pipette_prompt());
+                                state.render();
+                            }
+                            return LRESULT(0);
+                        }
 
-                let letter_tool = match key {
-                    0x58 /* X */ => Some(ToolMode::Blur),
-                    0x52 /* R */ => Some(ToolMode::Rectangle),
-                    0x43 /* C */ => Some(ToolMode::Circle),
-                    0x54 /* T */ => Some(ToolMode::Text),
-                    0x53 /* S */ => Some(ToolMode::Snip),
-                    0x50 /* P */ => Some(ToolMode::Freehand),
-                    0x4C /* L */ => Some(ToolMode::Line),
-                    0x41 /* A */ => Some(ToolMode::Arrow),
-                    0x4E /* N */ => Some(ToolMode::NumberedBadge),
-                    _ => None,
-                };
-
-                if let Some(tool) = letter_tool {
-                    if !is_repeat {
-                        state.held_key_down = Some((key, std::time::Instant::now()));
-                        state.active_spring_tool = Some(tool);
-                        state.toolbar.active_tool = tool;
-                        state.render();
+                        if !is_repeat {
+                            state.held_key_down = Some((key, std::time::Instant::now()));
+                            state.active_spring_tool = Some(tool);
+                            state.toolbar.active_tool = tool;
+                            state.render();
+                        }
+                        return LRESULT(0);
                     }
-                    return LRESULT(0);
                 }
             }
 
@@ -2482,31 +2783,20 @@ pub unsafe extern "system" fn overlay_wndproc(
                 return LRESULT(0);
             }
 
-            // Check hybrid letter keys release
+            // Check hybrid tool keys release
             if let Some((held_k, press_time)) = state.held_key_down {
                 if held_k == key {
                     state.held_key_down = None;
                     let duration = press_time.elapsed();
-                    let mapped_tool = match key {
-                        0x58 /* X */ => Some(ToolMode::Blur),
-                        0x52 /* R */ => Some(ToolMode::Rectangle),
-                        0x43 /* C */ => Some(ToolMode::Circle),
-                        0x54 /* T */ => Some(ToolMode::Text),
-                        0x53 /* S */ => Some(ToolMode::Snip),
-                        0x50 /* P */ => Some(ToolMode::Freehand),
-                        0x4C /* L */ => Some(ToolMode::Line),
-                        0x41 /* A */ => Some(ToolMode::Arrow),
-                        0x4E /* N */ => Some(ToolMode::NumberedBadge),
-                        _ => None,
-                    };
-
-                    if let Some(tool) = mapped_tool {
+                    let ch = (key as u8) as char;
+                    let s = crate::settings::get_settings();
+                    if let Some(tool) = s.keybindings.get_tool(ch) {
                         if duration.as_millis() < 280 && !state.is_drawing {
                             // Quick TAP: Permanently switch tool!
                             state.base_tool = tool;
                             state.toolbar.active_tool = tool;
                             state.active_spring_tool = None;
-                            state.show_toast(&format!("✓ {}", tool.label_hu()));
+                            state.show_toast(tool.label(state.toolbar.language));
                             state.render();
                         } else {
                             // HOLD: Spring-loaded release
@@ -2713,8 +3003,11 @@ pub fn show_overlay(hwnd: HWND) {
             state.held_key_down = None;
             state.ctrl_used_for_shortcut = false;
 
+            let lang = crate::settings::get_settings().language;
+            state.toolbar.language = lang;
+
             if let Some(update) = crate::updater::get_available_update() {
-                state.show_toast(&format!("Új DrawIt verzió érhető el: {} (Logo menü)", update.tag));
+                state.show_toast(&lang.toast_update_available(&update.tag));
             }
 
             IS_OVERLAY_OPEN.store(true, Ordering::SeqCst);

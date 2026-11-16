@@ -80,7 +80,8 @@ impl TrayState {
             }
         }
 
-        let tip_text = "DrawIt – Képernyő rajzoló és jegyzetelő (Ctrl + 2)";
+        let s = crate::settings::get_settings();
+        let tip_text = format!("{} ({})", s.language.tray_tip_prefix(), s.global_hotkey);
         let utf16: Vec<u16> = tip_text.encode_utf16().collect();
         let copy_len = utf16.len().min(nid.szTip.len() - 1);
         nid.szTip[..copy_len].copy_from_slice(&utf16[..copy_len]);
@@ -211,6 +212,9 @@ unsafe extern "system" fn tray_wndproc(
                         show_overlay(state.overlay_hwnd);
                         let ov_ptr = GetWindowLongPtrW(state.overlay_hwnd, GWLP_USERDATA) as *mut OverlayState;
                         if !ov_ptr.is_null() {
+                            (*ov_ptr).temp_settings = crate::settings::load_settings();
+                            (*ov_ptr).settings_tab = 0;
+                            (*ov_ptr).rebinding_tool = None;
                             (*ov_ptr).active_modal = ActiveModal::Settings;
                             (*ov_ptr).render();
                         }
@@ -270,18 +274,38 @@ unsafe fn show_tray_context_menu(state: &TrayState) {
         return;
     }
 
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_START, w!("Rajzolás indítása (Ctrl + 2)"));
+    let to_w = |s: &str| -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    };
+
+    let s = crate::settings::get_settings();
+    let lang = s.language;
+
+    let start_text = format!("{} ({})", lang.tray_start(), s.global_hotkey);
+    let start_w = to_w(&start_text);
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_START, PCWSTR(start_w.as_ptr()));
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, w!("Beállítások..."));
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_UPDATE, w!("Frissítések keresése..."));
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_HELP, w!("Útmutató és billentyűk (F1)"));
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_ABOUT, w!("Névjegy"));
+
+    let settings_w = to_w(lang.tray_settings());
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, PCWSTR(settings_w.as_ptr()));
+
+    let update_w = to_w(lang.tray_updates());
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_UPDATE, PCWSTR(update_w.as_ptr()));
+
+    let help_w = to_w(lang.tray_help());
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_HELP, PCWSTR(help_w.as_ptr()));
+
+    let about_w = to_w(lang.tray_about());
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_ABOUT, PCWSTR(about_w.as_ptr()));
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
 
     let autostart_flag = if is_autostart_enabled() { MF_CHECKED } else { MF_UNCHECKED };
-    let _ = AppendMenuW(menu, MF_STRING | autostart_flag, ID_TRAY_AUTOSTART, w!("Indítás a Windows-zal"));
+    let auto_w = to_w(lang.tray_autostart());
+    let _ = AppendMenuW(menu, MF_STRING | autostart_flag, ID_TRAY_AUTOSTART, PCWSTR(auto_w.as_ptr()));
     let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, w!("Kilépés"));
+
+    let exit_w = to_w(lang.tray_exit());
+    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_EXIT, PCWSTR(exit_w.as_ptr()));
 
     let _ = SetMenuDefaultItem(menu, ID_TRAY_START as u32, 0);
 

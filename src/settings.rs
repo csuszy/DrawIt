@@ -1,23 +1,29 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
+pub use crate::i18n::Language;
+pub use crate::models::ToolKeybindings;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppSettings {
+    pub language: Language,
     pub global_hotkey: String, // "Ctrl+2", "F8", "Ctrl+Alt+D", "Win+Alt+D"
     pub autostart: bool,
     pub check_updates: bool,
     pub last_color: (u8, u8, u8),
     pub last_thickness: f32,
+    pub keybindings: ToolKeybindings,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            language: Language::Hu,
             global_hotkey: "Ctrl+2".to_string(),
             autostart: false,
             check_updates: true,
             last_color: (255, 59, 48),
             last_thickness: 4.0,
+            keybindings: ToolKeybindings::default(),
         }
     }
 }
@@ -92,6 +98,11 @@ fn parse_string(text: &str, key: &str, default: &str) -> String {
     default.to_string()
 }
 
+fn parse_char(text: &str, key: &str, default: char) -> char {
+    let s = parse_string(text, key, "");
+    s.chars().next().map(|c| c.to_ascii_uppercase()).unwrap_or(default)
+}
+
 fn parse_f32(text: &str, key: &str, default: f32) -> f32 {
     let p = format!("\"{}\":", key);
     if let Some(idx) = text.find(&p) {
@@ -132,11 +143,29 @@ pub fn load_settings() -> AppSettings {
         if let Some(p) = p_opt {
             if p.exists() {
                 if let Ok(text) = std::fs::read_to_string(&p) {
+                    let lang_str = parse_string(&text, "language", defaults.language.as_str());
+                    defaults.language = Language::from_str(&lang_str);
                     defaults.global_hotkey = parse_string(&text, "global_hotkey", &defaults.global_hotkey);
                     defaults.autostart = parse_bool(&text, "autostart", defaults.autostart);
                     defaults.check_updates = parse_bool(&text, "check_updates", defaults.check_updates);
                     defaults.last_color = parse_color(&text, defaults.last_color);
                     defaults.last_thickness = parse_f32(&text, "last_thickness", defaults.last_thickness);
+
+                    let mut kb = ToolKeybindings::default();
+                    kb.freehand = parse_char(&text, "freehand", kb.freehand);
+                    kb.line = parse_char(&text, "line", kb.line);
+                    kb.arrow = parse_char(&text, "arrow", kb.arrow);
+                    kb.rectangle = parse_char(&text, "rectangle", kb.rectangle);
+                    kb.filled_rectangle = parse_char(&text, "filled_rectangle", kb.filled_rectangle);
+                    kb.circle = parse_char(&text, "circle", kb.circle);
+                    kb.badge = parse_char(&text, "badge", kb.badge);
+                    kb.curve = parse_char(&text, "curve", kb.curve);
+                    kb.text = parse_char(&text, "text", kb.text);
+                    kb.blur = parse_char(&text, "blur", kb.blur);
+                    kb.snip = parse_char(&text, "snip", kb.snip);
+                    kb.pipette = parse_char(&text, "pipette", kb.pipette);
+                    defaults.keybindings = kb;
+
                     return defaults;
                 }
             }
@@ -151,13 +180,27 @@ pub fn save_settings(s: &AppSettings) {
         *guard = Some(s.clone());
     }
 
+    let kb = &s.keybindings;
     let json = format!(
-        "{{\n  \"global_hotkey\": \"{}\",\n  \"autostart\": {},\n  \"check_updates\": {},\n  \"last_color\": [{}, {}, {}],\n  \"last_thickness\": {:.1}\n}}\n",
+        "{{\n  \"language\": \"{}\",\n  \"global_hotkey\": \"{}\",\n  \"autostart\": {},\n  \"check_updates\": {},\n  \"last_color\": [{}, {}, {}],\n  \"last_thickness\": {:.1},\n  \"keybindings\": {{\n    \"freehand\": \"{}\",\n    \"line\": \"{}\",\n    \"arrow\": \"{}\",\n    \"rectangle\": \"{}\",\n    \"filled_rectangle\": \"{}\",\n    \"circle\": \"{}\",\n    \"badge\": \"{}\",\n    \"curve\": \"{}\",\n    \"text\": \"{}\",\n    \"blur\": \"{}\",\n    \"snip\": \"{}\",\n    \"pipette\": \"{}\"\n  }}\n}}\n",
+        s.language.as_str(),
         s.global_hotkey,
         s.autostart,
         s.check_updates,
         s.last_color.0, s.last_color.1, s.last_color.2,
-        s.last_thickness
+        s.last_thickness,
+        kb.freehand,
+        kb.line,
+        kb.arrow,
+        kb.rectangle,
+        kb.filled_rectangle,
+        kb.circle,
+        kb.badge,
+        kb.curve,
+        kb.text,
+        kb.blur,
+        kb.snip,
+        kb.pipette,
     );
 
     // Sync autostart with Windows Registry
@@ -185,17 +228,28 @@ mod tests {
     #[test]
     fn test_settings_json_parsing() {
         let json = r#"{
+  "language": "en",
   "global_hotkey": "F8",
   "autostart": true,
   "check_updates": false,
   "last_color": [10, 200, 50],
-  "last_thickness": 8.5
+  "last_thickness": 8.5,
+  "keybindings": {
+    "freehand": "B",
+    "line": "K",
+    "arrow": "A"
+  }
 }"#;
 
+        assert_eq!(Language::from_str(&parse_string(json, "language", "hu")), Language::En);
         assert_eq!(parse_string(json, "global_hotkey", "Ctrl+2"), "F8");
         assert_eq!(parse_bool(json, "autostart", false), true);
         assert_eq!(parse_bool(json, "check_updates", true), false);
         assert_eq!(parse_color(json, (0, 0, 0)), (10, 200, 50));
         assert_eq!(parse_f32(json, "last_thickness", 4.0), 8.5);
+        assert_eq!(parse_char(json, "freehand", 'P'), 'B');
+        assert_eq!(parse_char(json, "line", 'L'), 'K');
+        assert_eq!(parse_char(json, "arrow", 'A'), 'A');
+        assert_eq!(parse_char(json, "circle", 'C'), 'C');
     }
 }

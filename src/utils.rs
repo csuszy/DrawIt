@@ -179,22 +179,30 @@ pub fn save_png_dialog(
     height: u32,
     rgba_pixels: &[u8],
 ) -> Option<String> {
+    let filter = crate::settings::get_settings().language.file_filter_png();
     if let Some(path) = prompt_save_file_path(
         hwnd,
         default_filename,
-        w!("PNG kép (*.png)\0*.png\0Minden fájl (*.*)\0*.*\0\0"),
+        filter,
         w!("png"),
     ) {
-        if image::save_buffer(
-            &path,
+        let full_path = if !path.to_lowercase().ends_with(".png") {
+            format!("{}.png", path)
+        } else {
+            path
+        };
+
+        if image::save_buffer_with_format(
+            &full_path,
             rgba_pixels,
             width,
             height,
             image::ExtendedColorType::Rgba8,
+            image::ImageFormat::Png,
         )
         .is_ok()
         {
-            return Some(path);
+            return Some(full_path);
         }
     }
     None
@@ -207,10 +215,11 @@ pub fn save_pdf_dialog(
     height: u32,
     rgba_pixels: &[u8],
 ) -> Option<String> {
+    let filter = crate::settings::get_settings().language.file_filter_pdf();
     if let Some(path) = prompt_save_file_path(
         hwnd,
         default_filename,
-        w!("PDF dokumentum (*.pdf)\0*.pdf\0Minden fájl (*.*)\0*.*\0\0"),
+        filter,
         w!("pdf"),
     ) {
         if let Ok(pdf_data) = crate::pdf::create_pdf_from_rgba(width, height, rgba_pixels) {
@@ -276,4 +285,24 @@ pub fn rgb_to_hsv(r: u8, g: u8, b: u8) -> (f32, f32, f32) {
     let v = cmax;
 
     (h, s, v)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_png_saving() {
+        let pixels = vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255];
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join("test_png_save.png");
+        let res = image::save_buffer_with_format(
+            &path,
+            &pixels,
+            2,
+            2,
+            image::ExtendedColorType::Rgba8,
+            image::ImageFormat::Png,
+        );
+        assert!(res.is_ok());
+        let _ = std::fs::remove_file(path);
+    }
 }

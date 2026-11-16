@@ -20,8 +20,30 @@ pub struct MonitorInfo {
     pub y: i32,
     pub width: i32,
     pub height: i32,
-    pub _is_primary: bool,
+    pub is_primary: bool,
+    #[allow(dead_code)]
     pub name: String,
+}
+
+impl MonitorInfo {
+    pub fn display_name(&self, lang: crate::i18n::Language) -> String {
+        match lang {
+            crate::i18n::Language::Hu => {
+                if self.is_primary {
+                    format!("{}. Kijelző [Főképernyő] ({}×{})", self.index + 1, self.width, self.height)
+                } else {
+                    format!("{}. Kijelző ({}×{})", self.index + 1, self.width, self.height)
+                }
+            }
+            crate::i18n::Language::En => {
+                if self.is_primary {
+                    format!("Display {} [Primary] ({}×{})", self.index + 1, self.width, self.height)
+                } else {
+                    format!("Display {} ({}×{})", self.index + 1, self.width, self.height)
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -78,7 +100,7 @@ extern "system" fn monitor_enum_proc(
                 y: mi.rcMonitor.top,
                 width: w,
                 height: h,
-                _is_primary: is_primary,
+                is_primary,
                 name,
             });
         }
@@ -328,25 +350,56 @@ pub fn crop_bgra(
     crop_w: u32,
     crop_h: u32,
 ) -> Vec<u8> {
-    let mut out = vec![0u8; (crop_w as usize) * (crop_h as usize) * 4];
-    for y in 0..crop_h {
-        let sy = crop_y + y;
-        if sy >= src_h {
-            break;
+    let mut out = vec![255u8; (crop_w as usize) * (crop_h as usize) * 4];
+    if crop_w == 0 || crop_h == 0 || src_w == 0 || src_h == 0 || crop_x >= src_w || crop_y >= src_h {
+        return out;
+    }
+
+    let actual_w = (crop_w as usize).min((src_w - crop_x) as usize);
+    let actual_h = (crop_h as usize).min((src_h - crop_y) as usize);
+    let copy_bytes = actual_w * 4;
+
+    for y in 0..actual_h {
+        let sy = (crop_y as usize) + y;
+        let s_idx = (sy * (src_w as usize) + (crop_x as usize)) * 4;
+        let d_idx = y * (crop_w as usize) * 4;
+        if s_idx + copy_bytes <= src.len() && d_idx + copy_bytes <= out.len() {
+            out[d_idx..d_idx + copy_bytes].copy_from_slice(&src[s_idx..s_idx + copy_bytes]);
         }
-        let s_row = (sy * src_w + crop_x) as usize * 4;
-        let d_row = (y * crop_w) as usize * 4;
-        let row_bytes = (crop_w as usize * 4).min((src_w - crop_x) as usize * 4);
-        out[d_row..d_row + row_bytes].copy_from_slice(&src[s_row..s_row + row_bytes]);
     }
     out
 }
 
-/// Converts BGRA32 to RGBA32
+/// Converts BGRA32 to RGBA32, ensuring 100% opaque alpha channel
 pub fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
     let mut rgba = bgra.to_vec();
     for chunk in rgba.chunks_exact_mut(4) {
         chunk.swap(0, 2); // Swap B and R
+        chunk[3] = 255;   // Always 100% opaque alpha!
     }
     rgba
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bgra_to_rgba_alpha_opaque() {
+        // Pixel: B=100, G=150, R=200, A=0 (GDI BitBlt zero-alpha)
+        let bgra = vec![100u8, 150, 200, 0];
+        let rgba = bgra_to_rgba(&bgra);
+        assert_eq!(rgba, vec![200u8, 150, 100, 255]);
+    }
+
+    #[test]
+    fn test_crop_bgra_bounds() {
+        let src = vec![1u8; 4 * 10 * 10]; // 10x10 image
+        let cropped = crop_bgra(&src, 10, 10, 2, 3, 4, 5);
+        assert_eq!(cropped.len(), 4 * 4 * 5);
+
+        // Out of bounds crop should not panic
+        let out_bounds = crop_bgra(&src, 10, 10, 8, 8, 5, 5);
+        assert_eq!(out_bounds.len(), 5 * 5 * 4);
+    }
 }

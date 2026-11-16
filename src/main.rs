@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 mod d2d;
+mod i18n;
 mod models;
 mod overlay;
 mod pdf;

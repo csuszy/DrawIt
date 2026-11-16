@@ -30,6 +30,7 @@ jobs:
           Copy-Item "DrawIt_logo.ico" "Release_Artifacts/DrawIt_logo.ico" -Force
           Copy-Item "DrawIt_logo.svg" "Release_Artifacts/DrawIt_logo.svg" -Force
           Copy-Item "README.md" "Release_Artifacts/README.md" -Force
+          Copy-Item "README.en.md" "Release_Artifacts/README.en.md" -Force
           Compress-Archive -Path "Release_Artifacts/*" -DestinationPath "Standalone_Files.zip" -Force
 
       - name: Publish GitHub Release

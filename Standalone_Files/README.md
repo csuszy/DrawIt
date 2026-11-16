@@ -3,9 +3,11 @@
 <p align="center">
   <img src="img/DrawIt_logo.svg" width="130" height="130" alt="DrawIt Logo" />
   <br>
-  <strong>DrawIt v0.2</strong>
+  <strong>DrawIt v0.3.0</strong>
   <br>
   <em>Villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző segédprogram Windows 10 és 11 rendszerekre</em>
+  <br><br>
+  <a href="README.md"><strong>Magyar</strong></a> | <a href="README.en.md"><strong>English</strong></a>
 </p>
 
 ---
@@ -117,11 +119,17 @@ A DrawIt professzionális rugós vezérlést támogat: nyomva tartás alatt idei
 
 ## Beállítások és Hordozhatóság
 
-A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető a **Beállítások** ablak:
-* **Globális indítóbillentyű testreszabása**: `Ctrl+2`, `F8`, `Ctrl+Alt+D`, vagy `Win+Alt+D`.
-* **Windows indítás (Autostart)**: Beállítható, hogy a Windows indításakor azonnal fusson a tálcán a háttérben.
-* **Automatikus frissítéskeresés**: Ki- és bekapcsolható az indításkori GitHub Releases verzióellenőrzés.
-* **Hordozható konfiguráció**: A beállítások automatikusan a `DrawIt.json` fájlban tárolódnak, így pendrive-ról futtatva is megőrzi a preferenciákat.
+A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető a **Beállítások** ablak, amely két fülre tagolódik:
+* **Általános fül**:
+  * **Nyelvválasztás**: Magyar és English felület dinamikus váltása.
+  * **Globális indítóbillentyű testreszabása**: `Ctrl+2`, `F8`, `Ctrl+Alt+D`, vagy `Win+Alt+D`.
+  * **Windows indítás (Autostart)**: Beállítható, hogy a Windows indításakor azonnal fusson a tálcán a háttérben.
+  * **Automatikus frissítéskeresés**: Ki- és bekapcsolható az indításkori GitHub Releases verzióellenőrzés.
+* **Gombkiosztás fül (Testreszabható rajzeszköz-billentyűk)**:
+  * Mind a 12 rajzeszköz gyorsbillentyűje interaktívan, egyetlen kattintással és a kívánt új billentyű (`A`–`Z` vagy `0`–`9`) lenyomásával testreszabható.
+  * Automatikus ütközésfeloldás: ha egy már használt billentyűt rendelsz egy másik eszközhöz, a szoftver intelligensen megcseréli a két gombot.
+  * Egykattintásos visszaállítás a gyári alapértelmezett gombokra (*Alapértelmezett gombok visszaállítása*).
+* **Hordozható konfiguráció**: Minden beállítás (a testreszabott gombkiosztással együtt) automatikusan a `DrawIt.json` fájlban tárolódik, így pendrive-ról futtatva is megőrzi a preferenciákat.
 
 ---
 

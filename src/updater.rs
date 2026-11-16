@@ -262,6 +262,7 @@ pub fn prompt_and_update(parent_hwnd: HWND, manual: bool) {
     let parent_raw = parent_hwnd.0 as usize;
     std::thread::spawn(move || {
         let parent = HWND(parent_raw as *mut _);
+        let lang = crate::settings::get_settings().language;
         let update_opt = match get_available_update() {
             Some(u) => Some(u),
             None => match check_for_update() {
@@ -271,8 +272,8 @@ pub fn prompt_and_update(parent_hwnd: HWND, manual: bool) {
                 }
                 Err(err) => {
                     if manual {
-                        let msg = to_wide(&format!("A frissítések keresése során hiba lépett fel:\n{}", err));
-                        let title = to_wide("DrawIt Frissítés");
+                        let msg = to_wide(&lang.updater_err_check(&err));
+                        let title = to_wide(lang.updater_title());
                         unsafe {
                             let _ = MessageBoxW(parent, PCWSTR(msg.as_ptr()), PCWSTR(title.as_ptr()), MB_OK | MB_ICONERROR);
                         }
@@ -284,13 +285,12 @@ pub fn prompt_and_update(parent_hwnd: HWND, manual: bool) {
 
         match update_opt {
             Some(update) => {
-                let msg = to_wide(&format!(
-                    "Új DrawIt verzió érhető el: {}!\n\nJelenlegi verzió: v{}\nLegújabb kiadás: {}\n\nSzeretnéd most letölteni és azonnal frissíteni az alkalmazást?",
-                    update.name,
+                let msg = to_wide(&lang.updater_avail_msg(
+                    &update.name,
                     env!("CARGO_PKG_VERSION"),
-                    update.tag
+                    &update.tag,
                 ));
-                let title = to_wide("DrawIt Frissítés elérhető");
+                let title = to_wide(lang.updater_avail_title());
                 let res = unsafe {
                     MessageBoxW(
                         parent,
@@ -303,8 +303,8 @@ pub fn prompt_and_update(parent_hwnd: HWND, manual: bool) {
                 if res == IDYES {
                     if let Some(dl_url) = update.download_url {
                         if let Err(e) = apply_update(&dl_url) {
-                            let emsg = to_wide(&format!("A frissítés letöltése vagy telepítése sikertelen:\n{}", e));
-                            let etitle = to_wide("Frissítési hiba");
+                            let emsg = to_wide(&lang.updater_err_apply(&e));
+                            let etitle = to_wide(lang.updater_err_title());
                             unsafe {
                                 let _ = MessageBoxW(parent, PCWSTR(emsg.as_ptr()), PCWSTR(etitle.as_ptr()), MB_OK | MB_ICONERROR);
                             }
@@ -326,11 +326,8 @@ pub fn prompt_and_update(parent_hwnd: HWND, manual: bool) {
             }
             None => {
                 if manual {
-                    let msg = to_wide(&format!(
-                        "A legújabb DrawIt verziót használod (v{}).\nNincs újabb frissítés a GitHubon.",
-                        env!("CARGO_PKG_VERSION")
-                    ));
-                    let title = to_wide("DrawIt Frissítés");
+                    let msg = to_wide(&lang.updater_latest_msg(env!("CARGO_PKG_VERSION")));
+                    let title = to_wide(lang.updater_title());
                     unsafe {
                         let _ = MessageBoxW(parent, PCWSTR(msg.as_ptr()), PCWSTR(title.as_ptr()), MB_OK | MB_ICONINFORMATION);
                     }
