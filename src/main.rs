@@ -41,16 +41,19 @@ fn main() {
         // 3. COM Apartment initialization for Direct2D, DirectWrite, Shell & Dialogs
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
-        // 3b. Cleanup any previous update artifacts and start background update check
-        updater::cleanup_old_exe();
-        let app_settings = settings::load_settings();
-        if app_settings.check_updates {
-            std::thread::spawn(|| {
-                std::thread::sleep(std::time::Duration::from_secs(3));
-                if let Ok(Some(info)) = updater::check_for_update() {
-                    updater::set_available_update(Some(info));
-                }
-            });
+        // 3b. Cleanup any previous update artifacts and start background update check (disabled for Microsoft Store builds)
+        #[cfg(not(feature = "store"))]
+        {
+            updater::cleanup_old_exe();
+            let app_settings = settings::load_settings();
+            if app_settings.check_updates {
+                std::thread::spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if let Ok(Some(info)) = updater::check_for_update() {
+                        updater::set_available_update(Some(info));
+                    }
+                });
+            }
         }
 
         // 4. Create Fullscreen Overlay Window spanning all displays

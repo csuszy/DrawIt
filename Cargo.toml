@@ -5,6 +5,10 @@ edition = "2021"
 authors = ["DrawIt Team"]
 description = "Fast, portable screen annotation tool for Windows"
 
+[features]
+default = []
+store = []
+
 [dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",

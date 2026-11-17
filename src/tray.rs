@@ -290,7 +290,9 @@ unsafe fn show_tray_context_menu(state: &TrayState) {
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, PCWSTR(settings_w.as_ptr()));
 
     let update_w = to_w(lang.tray_updates());
-    let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_UPDATE, PCWSTR(update_w.as_ptr()));
+    if crate::updater::has_store_link() {
+        let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_UPDATE, PCWSTR(update_w.as_ptr()));
+    }
 
     let help_w = to_w(lang.tray_help());
     let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_HELP, PCWSTR(help_w.as_ptr()));

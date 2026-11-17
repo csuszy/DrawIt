@@ -296,7 +296,8 @@ impl Toolbar {
             OpenPopup::LogoMenu => {
                 let (_, l_rect) = items.iter().find(|(it, _)| *it == ToolbarItem::LogoButton)?;
                 let pw = 220.0;
-                let ph = 216.0;
+                let show_update = crate::updater::has_store_link();
+                let ph = if show_update { 216.0 } else { 216.0 - 40.0 };
                 let px = l_rect.0.clamp(10.0, self.screen_width - pw - 10.0);
                 let py = self.y + self.height + 4.0;
 
@@ -310,8 +311,10 @@ impl Toolbar {
                 acts.push((PopupAction::Settings, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
                 ry += row_h + 4.0;
 
-                acts.push((PopupAction::CheckUpdates, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
-                ry += row_h + 4.0;
+                if show_update {
+                    acts.push((PopupAction::CheckUpdates, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
+                    ry += row_h + 4.0;
+                }
 
                 acts.push((PopupAction::About, (px + 8.0, ry, px + pw - 8.0, ry + row_h)));
                 ry += row_h + 4.0;

@@ -7,8 +7,14 @@
   <br>
   <em>Lightning-fast, portable screen annotator, presenter, and snipping tool for Windows 10 & 11</em>
   <br><br>
-  <a href="README.md"><strong>Magyar</strong></a> | <a href="README.en.md"><strong>English</strong></a>
+  <a href="README.md"><strong>Magyar</strong></a> | <a href="README.en.md"><strong>English</strong></a> | <a href="FEATURES.md"><strong>Detailed Features</strong></a>
 </p>
+
+---
+
+> [!TIP]
+> **Comprehensive Feature Guide & User Manual:**
+> For an in-depth breakdown of all 12 tools, spring-loaded key mechanics, color mixer, and digital canvas modes, see the **[Detailed Feature Guide (FEATURES.md)](FEATURES.md)**!
 
 ---
 
@@ -140,7 +146,7 @@ Open the **Settings** dialog from the toolbar logo menu or tray icon:
 DrawIt is available in multiple formats on [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest):
 
 * **Portable Version (Recommended)**: `DrawIt.exe` or `Standalone_Files.zip` – zero installation, runs anywhere (including USB drives).
-* **Microsoft Store / MSIX Package**: `DrawIt.msix` – modern Windows application package for Microsoft Store or direct sideloading.
+* **Microsoft Store / MSIX Package**: [Get it from Microsoft Store](ms-windows-store://pdp/?productid=9NHQC57FT5LQ) or download the standalone `DrawIt.msix` package.
 * **Windows Installer**: `DrawIt-Setup.exe` – classic setup wizard with Start Menu integration (per-user install, no admin privileges required).
 
 ### Getting Started

@@ -7,8 +7,14 @@
   <br>
   <em>Villámgyors, hordozható képernyőannotáló, magyarázó és képmetsző segédprogram Windows 10 és 11 rendszerekre</em>
   <br><br>
-  <a href="README.md"><strong>Magyar</strong></a> | <a href="README.en.md"><strong>English</strong></a>
+  <a href="README.md"><strong>Magyar</strong></a> | <a href="README.en.md"><strong>English</strong></a> | <a href="funkciok.md"><strong>Részletes Funkciók</strong></a>
 </p>
+
+---
+
+> [!TIP]
+> **Részletes funkcióleírás és felhasználói kézikönyv:**
+> A szoftver összes eszközének, billentyűparancsának és rejtett képességének kimerítő bemutatásához olvasd el a **[Részletes Funkcióleírás (funkciok.md)](funkciok.md)** kézikönyvet!
 
 ---
 
@@ -138,7 +144,7 @@ A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető 
 A DrawIt többféle formátumban érhető el a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalon:
 
 * **Hordozható változat (Portable - Ajánlott)**: `DrawIt.exe` vagy `Standalone_Files.zip` – nincs telepítés, pendrive-ról is azonnal fut.
-* **Microsoft Store / MSIX csomag**: `DrawIt.msix` – modern Windows alkalmazáscsomag a Microsoft Store áruházhoz vagy közvetlen Windows App Installer telepítéshez.
+* **Microsoft Store / MSIX csomag**: [Telepítés a Microsoft Store-ból](ms-windows-store://pdp/?productid=9NHQC57FT5LQ) vagy letölthető a `DrawIt.msix` csomag.
 * **Windows Telepítő**: `DrawIt-Setup.exe` – hagyományos varázslós telepítő start menü ikonnal (nem igényel rendszergazdai jogot, felhasználói szinten települ).
 
 ### Közvetlen indítás

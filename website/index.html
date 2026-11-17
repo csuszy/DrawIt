@@ -1,0 +1,1946 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#060b16">
+  <meta name="description" content="DrawIT – gyors, Rust-alapú képernyőrajzoló Windowsra. Rajzolj, jelölj, vágj ki és mentsd el, amit látsz.">
+  <meta property="og:title" content="DrawIT – Képernyőrajzoló Windowsra">
+  <meta property="og:description" content="Gyors, nyílt forráskódú, Rust-alapú képernyőrajzoló és képernyőkivágó eszköz Windowsra.">
+  <meta property="og:image" content="DrawIT_logo.png">
+  <title>DrawIT – Képernyőrajzoló Windowsra</title>
+  <link rel="icon" type="image/png" href="DrawIT_logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #060b16;
+      --bg-surface: #0d1526;
+      --bg-elevated: #131e36;
+      --line: rgba(148, 176, 224, 0.14);
+      --line-strong: rgba(47, 123, 255, 0.48);
+      --text: #eef3fb;
+      --muted: #93a3be;
+      --accent: #267aff;
+      --accent-hover: #4790ff;
+      --accent-glow: rgba(38, 122, 255, 0.3);
+      --warn: #f2b857;
+      --warn-bg: rgba(242, 184, 87, 0.1);
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(ellipse 80% 45% at 50% -8%, rgba(38, 122, 255, 0.2), transparent 70%),
+        linear-gradient(rgba(148, 176, 224, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 176, 224, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 36px 36px, 36px 36px;
+      color: var(--text);
+      font-family: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; }
+    img { display: block; max-width: 100%; height: auto; }
+
+    :focus-visible {
+      outline: 2px solid var(--accent-hover);
+      outline-offset: 3px;
+    }
+
+    .wrap {
+      width: min(1100px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    /* Fejléc */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(6, 11, 22, 0.8);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--line);
+    }
+
+    header::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -1px;
+      height: 1.5px;
+      width: 100%;
+      background: linear-gradient(90deg, transparent, var(--accent), #38bdf8, transparent);
+      transform: scaleX(var(--p, 0));
+      transform-origin: left;
+      opacity: 0.85;
+      pointer-events: none;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 68px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      box-shadow: 0 0 18px var(--accent-glow);
+      transition: transform 0.25s ease;
+    }
+
+    .brand:hover img {
+      transform: rotate(-6deg) scale(1.06);
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    nav a {
+      text-decoration: none;
+      transition: color 0.18s ease;
+    }
+
+    nav a:hover { color: var(--text); }
+
+    nav .dl {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      background: var(--accent);
+      padding: 9px 16px;
+      border-radius: 999px;
+      font-weight: 600;
+      box-shadow: 0 4px 16px rgba(38, 122, 255, 0.35);
+      transition: background 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    nav .dl:hover {
+      background: var(--accent-hover);
+      color: #fff;
+      box-shadow: 0 6px 22px rgba(38, 122, 255, 0.5);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 72px 0 64px;
+    }
+
+    .hero-top {
+      max-width: 760px;
+    }
+
+    .pill-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 13px;
+      border-radius: 999px;
+      background: rgba(38, 122, 255, 0.12);
+      border: 1px solid rgba(38, 122, 255, 0.3);
+      color: #8ab8ff;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 22px;
+    }
+
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 8px #38bdf8;
+    }
+
+    h1 {
+      margin: 0 0 22px;
+      font-size: clamp(38px, 6vw, 62px);
+      line-height: 1.06;
+      letter-spacing: -0.035em;
+      font-weight: 800;
+    }
+
+    .underline-wrap {
+      position: relative;
+      display: inline-block;
+    }
+
+    .brush-svg {
+      position: absolute;
+      left: 0;
+      bottom: -8px;
+      width: 100%;
+      height: 14px;
+      pointer-events: none;
+    }
+
+    .brush-path {
+      stroke: var(--accent);
+      stroke-width: 5;
+      stroke-linecap: round;
+      fill: none;
+      stroke-dasharray: 340;
+      stroke-dashoffset: 340;
+      animation: drawStroke 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
+    }
+
+    @keyframes drawStroke {
+      to { stroke-dashoffset: 0; }
+    }
+
+    .lead {
+      max-width: 600px;
+      margin: 0 0 32px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.65;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 15px;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(38, 122, 255, 0.36);
+      transition: background 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 12px 28px rgba(38, 122, 255, 0.5);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 13px 20px;
+      border-radius: 10px;
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--line-strong);
+      background: var(--bg-elevated);
+    }
+
+    .btn-store {
+      display: inline-flex;
+      align-items: center;
+      gap: 13px;
+      padding: 12px 24px;
+      border-radius: 10px;
+      background: #0078d4;
+      color: #fff;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 8px 26px rgba(0, 120, 212, 0.45);
+      transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+
+    .btn-store:hover {
+      background: #106ebe;
+      box-shadow: 0 12px 32px rgba(0, 120, 212, 0.65);
+      transform: translateY(-2px);
+      color: #fff;
+    }
+
+    .btn-store-text {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+      line-height: 1.2;
+    }
+
+    .btn-store-sub {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.85);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .btn-store-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+
+    /* Interaktív Hero Vászon */
+    .stage-wrapper {
+      margin-top: 52px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: #030917;
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      overflow: hidden;
+    }
+
+    .stage-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px 18px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .stage-dots {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .stage-dots span.dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(148, 176, 224, 0.25);
+    }
+
+    .mini-tools {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      background: #0a101d;
+      padding: 4px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+    }
+
+    .tool-btn {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .tool-btn:hover { color: var(--text); }
+
+    .tool-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .color-swatches {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 8px;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+    }
+
+    .swatch {
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      padding: 0;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .swatch:hover { transform: scale(1.15); }
+    .swatch.active { border-color: #fff; transform: scale(1.15); }
+
+    .stage-canvas-area {
+      position: relative;
+      width: 100%;
+      min-height: 270px;
+      display: grid;
+      place-items: center;
+      padding: 42px 20px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(38, 122, 255, 0.09), transparent 65%),
+        #020a1a;
+      cursor: crosshair;
+      user-select: none;
+    }
+
+    .stage-canvas-area img {
+      position: relative;
+      z-index: 1;
+      max-width: 880px;
+      width: 100%;
+      border-radius: 14px;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.65);
+      pointer-events: none;
+    }
+
+    #demoCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      touch-action: none;
+    }
+
+    .canvas-hint {
+      position: absolute;
+      bottom: 14px;
+      right: 18px;
+      z-index: 3;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(13, 21, 38, 0.88);
+      border: 1px solid var(--line);
+      padding: 5px 12px;
+      border-radius: 999px;
+      pointer-events: none;
+    }
+
+    /* Szekciók */
+    section {
+      padding: 80px 0;
+      border-top: 1px solid var(--line);
+      scroll-margin-top: 72px;
+    }
+
+    .sec-head {
+      margin-bottom: 42px;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 3.8vw, 38px);
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    .sec-intro {
+      margin: 0;
+      color: var(--muted);
+      max-width: 580px;
+      font-size: 16px;
+    }
+
+    /* Bento Funkciórács */
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .card {
+      margin: 0;
+      position: relative;
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 26px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      transition: border-color 0.22s ease, transform 0.22s ease;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), rgba(38, 122, 255, 0.13), transparent 60%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-3px);
+    }
+
+    .card:hover::before { opacity: 1; }
+
+    .card-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: rgba(38, 122, 255, 0.12);
+      border: 1px solid rgba(38, 122, 255, 0.25);
+      color: #6ea6ff;
+      display: grid;
+      place-items: center;
+      margin-bottom: 18px;
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+    }
+
+    /* Képernyőképek */
+    .shots {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 28px;
+    }
+
+    .shot {
+      margin: 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      transition: border-color 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    .shot.full {
+      grid-column: 1 / -1;
+    }
+
+    .shot:hover {
+      border-color: var(--line-strong);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+    }
+
+    .shot-trigger {
+      display: block;
+      position: relative;
+      background: #020a1a;
+      overflow: hidden;
+      cursor: zoom-in;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .zoom-badge {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      background: rgba(6, 11, 22, 0.88);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--line);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 6px;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .shot:hover .zoom-badge,
+    .shot-trigger:focus-visible .zoom-badge {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .shot figcaption {
+      padding: 18px 22px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .shot figcaption b {
+      display: block;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    /* SmartScreen */
+    .ss {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 44px;
+      align-items: start;
+    }
+
+    .warn-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--warn-bg);
+      border: 1px solid rgba(242, 184, 87, 0.32);
+      color: var(--warn);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .ss-text p {
+      color: var(--muted);
+      margin: 0 0 26px;
+    }
+
+    .steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .steps li {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-size: 15px;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--warn-bg);
+      color: var(--warn);
+      border: 1px solid rgba(242, 184, 87, 0.35);
+      font-size: 13px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      margin-top: 1px;
+    }
+
+    .ss-pics {
+      display: grid;
+      gap: 18px;
+    }
+
+    .ss-card {
+      display: block;
+      text-decoration: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      cursor: zoom-in;
+      transition: border-color 0.2s ease;
+    }
+
+    .ss-card:hover {
+      border-color: rgba(242, 184, 87, 0.55);
+    }
+
+    .ss-card-label {
+      padding: 9px 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.22);
+    }
+
+    .ss-store-tip {
+      margin-top: 26px;
+      padding: 22px 24px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, rgba(38, 122, 255, 0.12), rgba(13, 21, 38, 0.85));
+      border: 1px solid rgba(38, 122, 255, 0.4);
+      display: flex;
+      gap: 18px;
+      align-items: flex-start;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    }
+
+    .ss-store-tip-icon {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(38, 122, 255, 0.18);
+      border: 1px solid rgba(38, 122, 255, 0.35);
+      display: grid;
+      place-items: center;
+    }
+
+    .ss-store-tip-content h4 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+
+    .ss-store-tip-content p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.55;
+    }
+
+    .btn-store-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+      box-shadow: 0 4px 14px rgba(38, 122, 255, 0.35);
+    }
+
+    .btn-store-inline:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 6px 20px rgba(38, 122, 255, 0.5);
+      transform: translateY(-1px);
+      color: #fff;
+    }
+
+    /* Modern Letöltési Grid */
+    .dl-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+      margin-top: 36px;
+      align-items: stretch;
+    }
+
+    .dl-card {
+      margin: 0;
+      position: relative;
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: 30px 26px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    .dl-card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-4px);
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+    }
+
+    .dl-card.featured {
+      background: linear-gradient(180deg, rgba(38, 122, 255, 0.12) 0%, var(--bg-surface) 60%);
+      border-color: rgba(38, 122, 255, 0.55);
+      box-shadow: 0 16px 40px rgba(38, 122, 255, 0.18);
+    }
+
+    .dl-card.featured:hover {
+      border-color: #38bdf8;
+      box-shadow: 0 22px 55px rgba(38, 122, 255, 0.32);
+    }
+
+    .dl-head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .dl-card-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: rgba(38, 122, 255, 0.14);
+      border: 1px solid rgba(38, 122, 255, 0.28);
+      display: grid;
+      place-items: center;
+    }
+
+    .dl-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .tag-blue {
+      background: rgba(0, 120, 212, 0.2);
+      border: 1px solid rgba(0, 120, 212, 0.45);
+      color: #60a5fa;
+    }
+
+    .tag-green {
+      background: rgba(16, 185, 129, 0.18);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+
+    .tag-purple {
+      background: rgba(168, 85, 247, 0.18);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #c084fc;
+    }
+
+    .dl-card-head {
+      margin-bottom: 20px;
+    }
+
+    .dl-card-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.015em;
+      margin: 0 0 4px;
+      color: #fff;
+    }
+
+    .dl-card-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .dl-btn-github {
+      background: #24292f;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .dl-btn-github:hover {
+      background: #32383f;
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #fff;
+    }
+
+    .dl-installer-links {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .dl-installer-links a {
+      color: #9abce6;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .dl-installer-links a:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
+
+    .dl-features {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 28px;
+      display: grid;
+      gap: 11px;
+      font-size: 14px;
+    }
+
+    .dl-features li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #d1dced;
+    }
+
+    .dl-features svg {
+      flex-shrink: 0;
+      color: #38bdf8;
+    }
+
+    .dl-card-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .dl-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      text-align: center;
+      transition: all 0.18s ease;
+    }
+
+    .dl-btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(38, 122, 255, 0.35);
+    }
+
+    .dl-btn-primary:hover {
+      background: var(--accent-hover);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(38, 122, 255, 0.5);
+    }
+
+    .dl-btn-store {
+      background: linear-gradient(135deg, #106ebe, #0078d4);
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(0, 120, 212, 0.38);
+    }
+
+    .dl-btn-store:hover {
+      background: linear-gradient(135deg, #187cd2, #106ebe);
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(0, 120, 212, 0.55);
+    }
+
+    .dl-btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .dl-btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--line-strong);
+      color: var(--text);
+    }
+
+    .dl-sublink {
+      font-size: 12.5px;
+      text-align: center;
+      color: var(--muted);
+      text-decoration: none;
+      margin-top: 6px;
+      transition: color 0.15s ease;
+    }
+
+    .dl-sublink:hover {
+      color: #38bdf8;
+    }
+
+    /* Záró CTA */
+    .cta-box {
+      position: relative;
+      background:
+        radial-gradient(circle at 85% 20%, rgba(38, 122, 255, 0.22), transparent 55%),
+        var(--bg-surface);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-lg);
+      padding: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 28px;
+    }
+
+    .cta-copy h2 { margin-bottom: 8px; }
+    .cta-copy p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 480px;
+    }
+
+    /* Lábléc */
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 28px 0 40px;
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .foot a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .foot a:hover { color: var(--text); }
+
+    /* Lightbox */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(3, 7, 16, 0.92);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+
+    .lightbox.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .lightbox-inner {
+      max-width: 1120px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .lightbox-img {
+      max-height: 78vh;
+      width: auto;
+      border-radius: 12px;
+      border: 1px solid var(--line-strong);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.75);
+      transform: scale(0.97);
+      transition: transform 0.25s ease;
+    }
+
+    .lightbox.open .lightbox-img {
+      transform: scale(1);
+    }
+
+    .lightbox-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 900px;
+      gap: 12px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .lb-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lb-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 7px 13px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .lb-btn:hover {
+      border-color: var(--line-strong);
+      background: var(--bg-elevated);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .brush-path { stroke-dashoffset: 0; animation: none; }
+      header::after { transform: scaleX(1); }
+      .card, .shot, .ss-card { transition: none; }
+    }
+
+    @media (max-width: 900px) {
+      .bento { grid-template-columns: repeat(2, 1fr); }
+      .ss { grid-template-columns: 1fr; }
+      .dl-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      nav a:not(.dl) { display: none; }
+      .hero { padding: 48px 0 44px; }
+      section { padding: 56px 0; }
+      .bento { grid-template-columns: 1fr; }
+      .shots { grid-template-columns: 1fr; }
+      .cta-box { padding: 30px 24px; }
+      .canvas-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav">
+      <a class="brand" href="#">
+        <img src="DrawIT_logo.png" alt="DrawIT logó">
+        DrawIT
+      </a>
+      <nav aria-label="Fő navigáció">
+        <a href="#funkciok">Funkciók</a>
+        <a href="#kepernyokepek">Képernyőképek</a>
+        <a href="#inditas">Első indítás</a>
+        <a href="https://apps.microsoft.com/detail/9NHQC57FT5LQ" target="_blank" rel="noopener" title="DrawIT a Microsoft Store-ban">MS Store</a>
+        <a href="https://github.com/csuszy/DrawIt" target="_blank" rel="noopener">GitHub</a>
+        <a class="dl" href="#letoltes" title="Ugrás a letöltési menühöz (Store, Portable, GitHub)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Letöltés
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <div class="hero-top">
+        <div class="pill-meta">
+          <span class="pill-dot" aria-hidden="true"></span>
+          Windows 10/11 · Ingyenes · Nyílt forráskódú · v0.3.0 · Elérhető a Microsoft Store-ban!
+        </div>
+        <h1>
+          Rajzolj közvetlenül a
+          <span class="underline-wrap">
+            képernyődre.
+            <svg class="brush-svg" viewBox="0 0 320 14" preserveAspectRatio="none" aria-hidden="true">
+              <path class="brush-path" d="M3 10 C 90 3, 220 3, 317 9" />
+            </svg>
+          </span>
+        </h1>
+        <p class="lead">A DrawIT egy villámgyors képernyőrajzoló és képernyőkivágó Windowsra. Jelölj, emelj ki, vágj ki egy részt és mentsd el azonnal. A v0.3.0 verzió natív Rust motorra és éles Direct2D vektoros felületre épül — azonnal indul és alig terheli a gépet.</p>
+        <div class="actions">
+          <a class="btn-store" href="ms-windows-store://pdp/?productid=9NHQC57FT5LQ" title="Telepítés a Microsoft Store-ból (0 SmartScreen figyelmeztetés)">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="2" y="2" width="9.5" height="9.5" rx="1.5" fill="#f25022"/>
+              <rect x="12.5" y="2" width="9.5" height="9.5" rx="1.5" fill="#7fba00"/>
+              <rect x="2" y="12.5" width="9.5" height="9.5" rx="1.5" fill="#00a4ef"/>
+              <rect x="12.5" y="12.5" width="9.5" height="9.5" rx="1.5" fill="#ffb900"/>
+            </svg>
+            <span class="btn-store-text">
+              <span class="btn-store-sub">Beszerezhető innen</span>
+              <span class="btn-store-title">Microsoft Store</span>
+            </span>
+          </a>
+          <a class="btn-secondary" href="#letoltes">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Többi kiadás
+          </a>
+        </div>
+      </div>
+
+      <div class="stage-wrapper">
+        <div class="stage-bar">
+          <div class="stage-dots">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="dot" aria-hidden="true"></span>
+            <span class="dot" aria-hidden="true"></span>
+            <span style="margin-left: 6px;">Interaktív előnézet</span>
+          </div>
+          <div class="mini-tools" role="toolbar" aria-label="Interaktív rajzeszközök">
+            <button type="button" class="tool-btn active" data-tool="pen">Rajz</button>
+            <button type="button" class="tool-btn" data-tool="highlighter">Kiemelő</button>
+            <button type="button" class="tool-btn" data-tool="arrow">Nyíl</button>
+            <button type="button" class="tool-btn" data-tool="rect">Keret</button>
+            <div class="color-swatches">
+              <button type="button" class="swatch active" data-color="#267aff" style="background:#267aff;" aria-label="Kék szín"></button>
+              <button type="button" class="swatch" data-color="#22c55e" style="background:#22c55e;" aria-label="Zöld szín"></button>
+              <button type="button" class="swatch" data-color="#f97316" style="background:#f97316;" aria-label="Narancs szín"></button>
+              <button type="button" class="swatch" data-color="#facc15" style="background:#facc15;" aria-label="Sárga szín"></button>
+            </div>
+            <button type="button" class="tool-btn" id="undoCanvasBtn" title="Utolsó vonás visszavonása">Vissza</button>
+            <button type="button" class="tool-btn" id="clearCanvasBtn" title="Rajz törlése">Törlés</button>
+          </div>
+        </div>
+        <div class="stage-canvas-area">
+          <img src="drawit-toolbar.png" alt="A DrawIT lebegő eszköztára">
+          <canvas id="demoCanvas" aria-label="Interaktív rajzvászon"></canvas>
+          <span class="canvas-hint">Húzd az egeret a vásznon a kipróbáláshoz</span>
+        </div>
+      </div>
+    </div>
+
+    <section id="funkciok">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Mit tud?</h2>
+          <p class="sec-intro">Minden eszköz egyetlen lebegő eszköztárban van, így bemutató vagy képernyőmegosztás közben sem kell menükben keresgélned.</p>
+        </div>
+        <div class="bento">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+            </div>
+            <h3>Rajzolás és jelölés</h3>
+            <p>Szabadkézi rajz, egyenes vonal, téglalap, kör, nyíl, sorszámozott jelölők és szöveges megjegyzések.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+            </div>
+            <h3>Színek és vonalvastagság</h3>
+            <p>Gyors színpaletta, egyedi színválasztó pipettával, állítható átlátszóság és pontos vonalvastagság.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+            </div>
+            <h3>Háttér módok</h3>
+            <p>Átlátszó élő képernyő, elmosott háttér, valamint fehér vagy fekete tábla mód egyetlen kattintással.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+            </div>
+            <h3>Kivágás és export</h3>
+            <p>Jelölj ki bármilyen képernyőrészletet pixelpontos mérettel, majd mentsd PNG-be, PDF-be vagy a vágólapra.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <h3>Többmonitoros kezelés</h3>
+            <p>Választhatsz az egyes kijelzők között, vagy a teljes többmonitoros asztalt is elmentheted egyszerre.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+            <h3>Natív Rust motor</h3>
+            <p>100% natív Rust kódbázis, alig 870 KB méret, azonnali indítás és minimális memóriahasználat (< 15 MB).</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <h3>100% Vektoros Direct2D</h3>
+            <p>Minden felületelem és beállítás Direct2D geometriai vektorokból épül fel — emojik nélkül, kristálytiszta bármilyen felbontáson.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg>
+            </div>
+            <h3>Testreszabható gyorsbillentyűk</h3>
+            <p>Rendelj tetszőleges egyedi billentyűparancsot bármelyik rajzeszközhöz, vonalvastagsághoz vagy mentéshez a Beállításokban.</p>
+          </article>
+
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <h3>Kétnyelvű kezelőfelület</h3>
+            <p>Azonnali váltás a magyar és angol nyelv között közvetlenül a vezérlősávról, újraindítás vagy újratelepítés nélkül.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="kepernyokepek">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Képernyőképek</h2>
+          <p class="sec-intro">Kattints bármelyik képre a teljes méretű nagyításhoz.</p>
+        </div>
+        <div class="shots">
+          <figure class="shot full" data-gallery>
+            <a class="shot-trigger" href="drawit-toolbar.png">
+              <img src="drawit-toolbar.png" alt="A DrawIT eszköztára sötétkék háttéren" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Eszköztár</b>Rajzeszközök, színválasztó, kijelzőváltás, kivágás és mentés egyetlen átlátható sorban.</figcaption>
+          </figure>
+
+          <figure class="shot" data-gallery>
+            <a class="shot-trigger" href="drawit-export.png">
+              <img src="drawit-export.png" alt="Kijelzők mentése PNG, PDF vagy vágólap formátumban" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Mentés kijelzőnként</b>Válassz monitort vagy a teljes asztalt, majd PNG, PDF vagy másolás.</figcaption>
+          </figure>
+
+          <figure class="shot" data-gallery>
+            <a class="shot-trigger" href="drawit-crop.png">
+              <img src="drawit-crop.png" alt="Kijelölt képernyőrész kivágása" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Kivágás</b>A kijelölt terület mérete pixelben látható, alatta az azonnali mentési lehetőségek.</figcaption>
+          </figure>
+
+          <figure class="shot" data-gallery>
+            <a class="shot-trigger" href="drawit-colors.png">
+              <img src="drawit-colors.png" alt="Színpaletta, pipetta, átlátszóság és vonalvastagság" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Színek és vonalvastagság</b>Paletta, egyedi szín, pipetta, átlátszóság és vonalvastagság.</figcaption>
+          </figure>
+
+          <figure class="shot" data-gallery>
+            <a class="shot-trigger" href="number-arrow.png">
+              <img src="number-arrow.png" alt="Nyilak és számozott jelölők a képernyőn" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Nyilak és számozott lépések</b>Lépésről lépésre folyamatokhoz, útmutatókhoz és hibák egyértelmű jelöléséhez.</figcaption>
+          </figure>
+
+          <figure class="shot" data-gallery>
+            <a class="shot-trigger" href="drawit-background.png">
+              <img src="drawit-background.png" alt="Háttérválasztó: átlátszó, elmosott, fehér és fekete tábla" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Háttér</b>Átlátszó, elmosott, fehér vagy fekete tábla.</figcaption>
+          </figure>
+
+          <figure class="shot" data-gallery>
+            <a class="shot-trigger" href="git_download.png">
+              <img src="git_download.png" alt="Letöltés GitHub Releases felületről" loading="lazy">
+              <span class="zoom-badge">Nagyítás</span>
+            </a>
+            <figcaption><b>Letöltés GitHubon keresztül</b>A legfrissebb kiadások és ellenőrzőösszegek közvetlenül elérhetők.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="inditas">
+      <div class="wrap ss">
+        <div class="ss-text">
+          <span class="warn-badge">Első indítás Windows alatt</span>
+          <h2>Miért jelenik meg a SmartScreen?</h2>
+          <p>A hordozható DrawIT nem rendelkezik drága éves kódaláíró tanúsítvánnyal, ezért a Windows Defender „Ismeretlen kiadó” figyelmeztetést jeleníthet meg. Ez teljesen normális és biztonságos — ha innen vagy a GitHubról töltötted le a programot, bátran engedélyezheted a futtatást.</p>
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <span>A kék figyelmeztető ablakban kattints a <b>További információ</b> hivatkozásra.</span>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <span>Ellenőrizd, hogy az alkalmazás neve <b>DrawIt.exe</b>.</span>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <span>Kattints a megjelenő <b>Futtatás mindenképpen</b> gombra a program elindításához.</span>
+            </li>
+          </ol>
+
+          <div class="ss-store-tip">
+            <div class="ss-store-tip-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <rect x="2" y="2" width="9.5" height="9.5" rx="1.5" fill="#f25022"/>
+                <rect x="12.5" y="2" width="9.5" height="9.5" rx="1.5" fill="#7fba00"/>
+                <rect x="2" y="12.5" width="9.5" height="9.5" rx="1.5" fill="#00a4ef"/>
+                <rect x="12.5" y="12.5" width="9.5" height="9.5" rx="1.5" fill="#ffb900"/>
+              </svg>
+            </div>
+            <div class="ss-store-tip-content">
+              <h4>Elkerülnéd a SmartScreen figyelmeztetést?</h4>
+              <p>Telepítsd a DrawIT-et a <b>Microsoft Store</b>-ból! A Store változatot a Microsoft automatikusan hitelesíti, így <b>figyelmeztetés nélkül, azonnal indul</b>, ráadásul a háttérben magától frissül.</p>
+              <a class="btn-store-inline" href="ms-windows-store://pdp/?productid=9NHQC57FT5LQ">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                Telepítés a Microsoft Store-ból
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div class="ss-pics">
+          <a class="ss-card" href="smartscreen-warning.png" data-gallery data-caption="1. lépés: Kattints a További információ linkre">
+            <div class="ss-card-label">1. lépés – SmartScreen figyelmeztetés</div>
+            <img src="smartscreen-warning.png" alt="A Windows SmartScreen első figyelmeztető ablaka" loading="lazy">
+          </a>
+          <a class="ss-card" href="smartscreen-details.png" data-gallery data-caption="2. lépés: Válaszd a Futtatás mindenképpen gombot">
+            <div class="ss-card-label">2. lépés – Részletes nézet és indítás</div>
+            <img src="smartscreen-details.png" alt="A SmartScreen részletes ablaka a Futtatás mindenképpen gombbal" loading="lazy">
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="letoltes" class="cta">
+      <div class="wrap">
+        <div class="sec-head" style="text-align: center; max-width: 680px; margin: 0 auto 12px;">
+          <h2>Töltsd le a DrawIT-et</h2>
+          <p class="sec-intro" style="margin: 0 auto;">Válaszd a számodra legmegfelelőbb változatot. A program 100%-ban ingyenes és nyílt forráskódú.</p>
+        </div>
+
+        <div class="dl-grid">
+          <!-- 1. Microsoft Store -->
+          <div class="dl-card featured">
+            <div class="dl-card-head">
+              <div class="dl-head-row">
+                <div class="dl-card-icon" style="background: rgba(0, 164, 239, 0.12); border-color: rgba(0, 164, 239, 0.35);">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <rect x="2" y="2" width="9.5" height="9.5" rx="1.5" fill="#f25022"/>
+                    <rect x="12.5" y="2" width="9.5" height="9.5" rx="1.5" fill="#7fba00"/>
+                    <rect x="2" y="12.5" width="9.5" height="9.5" rx="1.5" fill="#00a4ef"/>
+                    <rect x="12.5" y="12.5" width="9.5" height="9.5" rx="1.5" fill="#ffb900"/>
+                  </svg>
+                </div>
+                <span class="dl-tag tag-blue">Ajánlott</span>
+              </div>
+              <h3 class="dl-card-title">Microsoft Store</h3>
+              <div class="dl-card-subtitle">Windows 10 és 11 · v0.3.0 · Store ID: 9NHQC57FT5LQ</div>
+            </div>
+            <ul class="dl-features">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                0 SmartScreen figyelmeztetés
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                Automatikus háttérfrissítés
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                Microsoft által hitelesített biztonság
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+                1-kattintásos zökkenőmentes telepítés
+              </li>
+            </ul>
+            <div class="dl-card-actions">
+              <a class="dl-btn dl-btn-store" href="ms-windows-store://pdp/?productid=9NHQC57FT5LQ" title="Megnyitás a Microsoft Store alkalmazásban">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="2" y="2" width="9.5" height="9.5" rx="1" fill="#f25022"/>
+                  <rect x="12.5" y="2" width="9.5" height="9.5" rx="1" fill="#7fba00"/>
+                  <rect x="2" y="12.5" width="9.5" height="9.5" rx="1" fill="#00a4ef"/>
+                  <rect x="12.5" y="12.5" width="9.5" height="9.5" rx="1" fill="#ffb900"/>
+                </svg>
+                Telepítés a Store-ból
+              </a>
+              <a class="dl-sublink" href="https://apps.microsoft.com/detail/9NHQC57FT5LQ" target="_blank" rel="noopener">
+                Megnyitás böngészőben (apps.microsoft.com) ↗
+              </a>
+            </div>
+          </div>
+
+          <!-- 2. Hordozható EXE -->
+          <div class="dl-card">
+            <div class="dl-card-head">
+              <div class="dl-head-row">
+                <div class="dl-card-icon" style="background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.35); color: #22c55e;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                </div>
+                <span class="dl-tag tag-green">Telepítés nélkül</span>
+              </div>
+              <h3 class="dl-card-title">Hordozható .EXE</h3>
+              <div class="dl-card-subtitle">DrawIt.exe · v0.3.0 · 873 KB (64-bit)</div>
+            </div>
+            <ul class="dl-features">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Nem igényel telepítést
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Pendrive-ról vagy mappából azonnal fut
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Rendszergazdai jog nélkül használható
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Natív Rust sebesség, &lt; 15 MB RAM
+              </li>
+            </ul>
+            <div class="dl-card-actions">
+              <a class="dl-btn dl-btn-primary" href="./DrawIt.exe" download title="DrawIt.exe közvetlen letöltése">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                DrawIt.exe letöltése (873 KB)
+              </a>
+              <a class="dl-sublink" href="./download/v0.3.0/DrawIt.exe" download>
+                v0.3.0 közvetlen archívum tükör ↗
+              </a>
+            </div>
+          </div>
+
+          <!-- 3. GitHub -->
+          <div class="dl-card">
+            <div class="dl-card-head">
+              <div class="dl-head-row">
+                <div class="dl-card-icon" style="background: rgba(168, 85, 247, 0.12); border-color: rgba(168, 85, 247, 0.35); color: #c084fc;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11.02 11.02 0 0 1 5.77 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.58.24 2.75.12 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+                </div>
+                <span class="dl-tag tag-purple">Kiadások & Kód</span>
+              </div>
+              <h3 class="dl-card-title">GitHub Releases</h3>
+              <div class="dl-card-subtitle">Telepítők, MSIX és forráskód · v0.3.0</div>
+            </div>
+            <ul class="dl-features">
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Nyílt forráskódú Rust kódbázis (MIT)
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Hagyományos Windows telepítő (Setup.exe)
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                MSIX csomag vállalati terjesztéshez
+              </li>
+              <li>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                SHA-256 ellenőrzőösszegek és előzmények
+              </li>
+            </ul>
+            <div class="dl-card-actions">
+              <a class="dl-btn dl-btn-github" href="https://github.com/csuszy/DrawIt/releases" target="_blank" rel="noopener">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11.02 11.02 0 0 1 5.77 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.58.24 2.75.12 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .31.21.68.8.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+                GitHub Releases megnyitása
+              </a>
+              <div class="dl-installer-links">
+                Közvetlen: <a href="./DrawIt-Setup.exe" download>Setup.exe (2.5M)</a> · <a href="./DrawIt.msix" download>DrawIt.msix (414K)</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot">
+      <span>DrawIT © 2026 · v0.3.0</span>
+      <span>
+        <a href="ms-windows-store://pdp/?productid=9NHQC57FT5LQ">Microsoft Store</a> · 
+        <a href="https://github.com/csuszy/DrawIt" target="_blank" rel="noopener">GitHub</a> · 
+        <a href="https://github.com/csuszy/DrawIt/releases" target="_blank" rel="noopener">Kiadások</a> · 
+        Nyílt forráskódú képernyőrajzoló Windowsra
+      </span>
+    </div>
+  </footer>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Kép nagyítása">
+    <div class="lightbox-inner">
+      <img class="lightbox-img" id="lbImg" src="" alt="">
+      <div class="lightbox-bar">
+        <span id="lbCaption"></span>
+        <div class="lb-controls">
+          <button type="button" class="lb-btn" id="lbPrev" aria-label="Előző kép">←</button>
+          <button type="button" class="lb-btn" id="lbNext" aria-label="Következő kép">→</button>
+          <a class="lb-btn" id="lbRaw" href="#" target="_blank" rel="noopener">Eredeti méret</a>
+          <button type="button" class="lb-btn" id="lbClose">Bezárás (Esc)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script>
+    (function () {
+      /* 1. Bento kártya egérkövető fény */
+      document.querySelectorAll(".card").forEach(function (card) {
+        card.addEventListener("mousemove", function (e) {
+          var rect = card.getBoundingClientRect();
+          card.style.setProperty("--mx", (e.clientX - rect.left) + "px");
+          card.style.setProperty("--my", (e.clientY - rect.top) + "px");
+        });
+      });
+
+      /* 2. Interaktív Hero rajzvászon */
+      var canvas = document.getElementById("demoCanvas");
+      if (canvas) {
+        var ctx = canvas.getContext("2d");
+        var tool = "pen";
+        var color = "#267aff";
+        var drawing = false;
+        var startX = 0, startY = 0;
+        var strokes = [];
+        var currentStroke = null;
+        var initialized = false;
+
+        function seedSample() {
+          var w = canvas.parentElement.clientWidth;
+          var h = canvas.parentElement.clientHeight;
+          if (w < 480) return;
+          strokes.push({
+            tool: "arrow",
+            color: "#22c55e",
+            x1: w * 0.14,
+            y1: h * 0.84,
+            x2: w * 0.19,
+            y2: h * 0.64
+          });
+        }
+
+        function resizeCanvas() {
+          var rect = canvas.parentElement.getBoundingClientRect();
+          var dpr = window.devicePixelRatio || 1;
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          if (!initialized) {
+            initialized = true;
+            seedSample();
+          }
+          redraw();
+        }
+
+        function drawArrow(c, x1, y1, x2, y2) {
+          var head = 13;
+          var angle = Math.atan2(y2 - y1, x2 - x1);
+          c.beginPath();
+          c.moveTo(x1, y1);
+          c.lineTo(x2, y2);
+          c.stroke();
+          c.beginPath();
+          c.moveTo(x2, y2);
+          c.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
+          c.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
+          c.closePath();
+          c.fill();
+        }
+
+        function renderItem(s) {
+          ctx.save();
+          ctx.strokeStyle = s.color;
+          ctx.fillStyle = s.color;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+
+          if (s.tool === "highlighter") {
+            ctx.globalAlpha = 0.34;
+            ctx.lineWidth = 16;
+          } else {
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 3.5;
+          }
+
+          if ((s.tool === "pen" || s.tool === "highlighter") && s.points.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(s.points[0].x, s.points[0].y);
+            for (var i = 1; i < s.points.length; i++) {
+              ctx.lineTo(s.points[i].x, s.points[i].y);
+            }
+            ctx.stroke();
+          } else if (s.tool === "rect") {
+            ctx.strokeRect(s.x1, s.y1, s.x2 - s.x1, s.y2 - s.y1);
+          } else if (s.tool === "arrow") {
+            drawArrow(ctx, s.x1, s.y1, s.x2, s.y2);
+          }
+          ctx.restore();
+        }
+
+        function redraw() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          strokes.forEach(renderItem);
+          if (currentStroke) renderItem(currentStroke);
+        }
+
+        function getPos(e) {
+          var rect = canvas.getBoundingClientRect();
+          return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        }
+
+        canvas.addEventListener("pointerdown", function (e) {
+          drawing = true;
+          canvas.setPointerCapture(e.pointerId);
+          var p = getPos(e);
+          startX = p.x;
+          startY = p.y;
+          if (tool === "pen" || tool === "highlighter") {
+            currentStroke = { tool: tool, color: color, points: [p] };
+          } else {
+            currentStroke = { tool: tool, color: color, x1: startX, y1: startY, x2: startX, y2: startY };
+          }
+        });
+
+        canvas.addEventListener("pointermove", function (e) {
+          if (!drawing || !currentStroke) return;
+          var p = getPos(e);
+          if (currentStroke.tool === "pen" || currentStroke.tool === "highlighter") {
+            currentStroke.points.push(p);
+          } else {
+            currentStroke.x2 = p.x;
+            currentStroke.y2 = p.y;
+          }
+          redraw();
+        });
+
+        function finishStroke() {
+          if (!drawing) return;
+          drawing = false;
+          if (currentStroke) {
+            strokes.push(currentStroke);
+            currentStroke = null;
+            redraw();
+          }
+        }
+
+        canvas.addEventListener("pointerup", finishStroke);
+        canvas.addEventListener("pointercancel", finishStroke);
+
+        document.querySelectorAll(".tool-btn[data-tool]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            document.querySelectorAll(".tool-btn[data-tool]").forEach(function (b) { b.classList.remove("active"); });
+            btn.classList.add("active");
+            tool = btn.getAttribute("data-tool");
+          });
+        });
+
+        document.querySelectorAll(".swatch").forEach(function (sw) {
+          sw.addEventListener("click", function () {
+            document.querySelectorAll(".swatch").forEach(function (s) { s.classList.remove("active"); });
+            sw.classList.add("active");
+            color = sw.getAttribute("data-color");
+          });
+        });
+
+        document.getElementById("undoCanvasBtn").addEventListener("click", function () {
+          strokes.pop();
+          redraw();
+        });
+
+        document.getElementById("clearCanvasBtn").addEventListener("click", function () {
+          strokes = [];
+          currentStroke = null;
+          redraw();
+        });
+
+        window.addEventListener("resize", resizeCanvas);
+        resizeCanvas();
+      }
+
+      /* 3. Lightbox galéria */
+      var lightbox = document.getElementById("lightbox");
+      var lbImg = document.getElementById("lbImg");
+      var lbCaption = document.getElementById("lbCaption");
+      var lbRaw = document.getElementById("lbRaw");
+      var lbClose = document.getElementById("lbClose");
+      var galleryItems = [];
+      var currentIdx = 0;
+      var lastTrigger = null;
+
+      document.querySelectorAll("[data-gallery]").forEach(function (el) {
+        var trigger = el.classList.contains("ss-card") ? el : el.querySelector(".shot-trigger");
+        var img = el.querySelector("img");
+        var href = trigger.getAttribute("href");
+        var capEl = el.querySelector("figcaption b");
+        var cap = capEl ? capEl.textContent : (el.getAttribute("data-caption") || img.alt);
+
+        var idx = galleryItems.length;
+        galleryItems.push({ href: href, alt: img.alt, caption: cap });
+
+        trigger.addEventListener("click", function (e) {
+          e.preventDefault();
+          lastTrigger = trigger;
+          openLightbox(idx);
+        });
+      });
+
+      function openLightbox(idx) {
+        currentIdx = (idx + galleryItems.length) % galleryItems.length;
+        var item = galleryItems[currentIdx];
+        lbImg.src = item.href;
+        lbImg.alt = item.alt;
+        lbCaption.textContent = item.caption;
+        lbRaw.href = item.href;
+        lightbox.setAttribute("aria-hidden", "false");
+        lightbox.classList.add("open");
+        lbClose.focus();
+      }
+
+      function closeLightbox() {
+        lightbox.classList.remove("open");
+        lightbox.setAttribute("aria-hidden", "true");
+        if (lastTrigger) lastTrigger.focus();
+      }
+
+      lbClose.addEventListener("click", closeLightbox);
+      document.getElementById("lbPrev").addEventListener("click", function () { openLightbox(currentIdx - 1); });
+      document.getElementById("lbNext").addEventListener("click", function () { openLightbox(currentIdx + 1); });
+
+      lightbox.addEventListener("click", function (e) {
+        if (e.target === lightbox) closeLightbox();
+      });
+
+      document.addEventListener("keydown", function (e) {
+        if (!lightbox.classList.contains("open")) return;
+        if (e.key === "Escape") closeLightbox();
+        if (e.key === "ArrowLeft") openLightbox(currentIdx - 1);
+        if (e.key === "ArrowRight") openLightbox(currentIdx + 1);
+      });
+
+      /* 4. GSAP + ScrollTrigger animációk */
+      if (typeof gsap === "undefined" || typeof ScrollTrigger === "undefined") return;
+      gsap.registerPlugin(ScrollTrigger);
+
+      var mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", function () {
+        gsap.defaults({ ease: "power3.out" });
+
+        gsap.from(".brand, nav > *", { y: -10, opacity: 0, duration: 0.55, stagger: 0.05 });
+        gsap.to("header", { "--p": 1, duration: 1.1, delay: 0.2, ease: "power2.inOut" });
+
+        var heroTl = gsap.timeline({ delay: 0.1 });
+        heroTl
+          .from(".pill-meta", { y: 14, opacity: 0, duration: 0.5 })
+          .from(".hero h1", { y: 24, opacity: 0, duration: 0.75 }, "-=0.3")
+          .from(".hero .lead", { y: 18, opacity: 0, duration: 0.65 }, "-=0.45")
+          .from(".hero .actions > *", { y: 14, opacity: 0, duration: 0.5, stagger: 0.08 }, "-=0.4")
+          .from(".stage-wrapper", { y: 32, opacity: 0, duration: 0.85 }, "-=0.45");
+
+        gsap.to(".stage-canvas-area img", {
+          yPercent: -5,
+          ease: "none",
+          scrollTrigger: { trigger: ".stage-wrapper", start: "top bottom", end: "bottom top", scrub: 0.6 }
+        });
+
+        gsap.utils.toArray("section").forEach(function (sec) {
+          var head = sec.querySelectorAll("h2, .sec-intro, .warn-badge, .cta-copy p");
+          if (head.length) {
+            gsap.from(head, {
+              y: 20, opacity: 0, duration: 0.65, stagger: 0.07,
+              scrollTrigger: { trigger: sec, start: "top 82%", once: true }
+            });
+          }
+        });
+
+        gsap.from(".bento", {
+          y: 20, opacity: 0, duration: 0.6,
+          scrollTrigger: { trigger: ".bento", start: "top 85%", once: true }
+        });
+
+        gsap.from(".dl-grid", {
+          y: 20, opacity: 0, duration: 0.6,
+          scrollTrigger: { trigger: ".dl-grid", start: "top 85%", once: true }
+        });
+
+        gsap.utils.toArray(".shot").forEach(function (shot) {
+          gsap.from(shot, {
+            y: 30, opacity: 0, duration: 0.75,
+            scrollTrigger: { trigger: shot, start: "top 88%", once: true }
+          });
+        });
+
+        gsap.from(".steps li", {
+          x: -14, opacity: 0, duration: 0.55, stagger: 0.1,
+          scrollTrigger: { trigger: ".steps", start: "top 86%", once: true }
+        });
+
+        gsap.from(".ss-card", {
+          y: 26, opacity: 0, duration: 0.7, stagger: 0.14,
+          scrollTrigger: { trigger: ".ss-pics", start: "top 88%", once: true }
+        });
+
+        gsap.utils.toArray(".btn-primary, .btn-secondary, nav .dl, .btn-store, .dl-btn, .btn-store-inline").forEach(function (b) {
+          b.addEventListener("mouseenter", function () { gsap.to(b, { y: -2, duration: 0.18 }); });
+          b.addEventListener("mouseleave", function () { gsap.to(b, { y: 0, duration: 0.22 }); });
+        });
+
+        gsap.utils.toArray(".shot-trigger, .ss-card").forEach(function (el) {
+          var img = el.querySelector("img");
+          el.addEventListener("mouseenter", function () { gsap.to(img, { scale: 1.02, duration: 0.4 }); });
+          el.addEventListener("mouseleave", function () { gsap.to(img, { scale: 1, duration: 0.45 }); });
+        });
+
+        document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
+          anchor.addEventListener("click", function (e) {
+            var href = this.getAttribute("href");
+            if (href && href !== "#") {
+              var target = document.querySelector(href);
+              if (target) {
+                e.preventDefault();
+                target.scrollIntoView({ behavior: "smooth" });
+                history.pushState(null, "", href);
+              }
+            }
+          });
+        });
+
+        window.addEventListener("load", function () { ScrollTrigger.refresh(); });
+      });
+    })();
+  </script>
+</body>
+</html>

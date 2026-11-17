@@ -108,7 +108,7 @@ if ($MakeAppx) {
             Write-Host "   Signing MSIX with developer certificate..." -ForegroundColor Gray
             $pfxPath = Join-Path $RootDir "target\DrawIt_Dev.pfx"
             if (-not (Test-Path $pfxPath)) {
-                $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=DrawIt" -KeyUsage DigitalSignature -FriendlyName "DrawIt Dev" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+                $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=0D299B98-5051-435C-8BB5-970045368EEC" -KeyUsage DigitalSignature -FriendlyName "DrawIt Dev" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
                 $pwd = ConvertTo-SecureString -String "DrawItDev123" -Force -AsPlainText
                 Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pwd | Out-Null
             }

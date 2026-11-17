@@ -1,5 +1,6 @@
 # Rust build directory
 /target/
+/dist/
 
 # Intermediate and scratch files
 **/*.rs.bk
