@@ -19,33 +19,26 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build release binary
+      - name: Build Portable release binary
         run: cargo build --release
 
-      - name: Prepare release files
+      - name: Prepare Portable release file
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force -Path "Release_Artifacts"
           Copy-Item "target/release/drawit.exe" "Release_Artifacts/DrawIt.exe" -Force
           Copy-Item "target/release/drawit.exe" "DrawIt.exe" -Force
-          Copy-Item "DrawIt_logo.ico" "Release_Artifacts/DrawIt_logo.ico" -Force
-          Copy-Item "DrawIt_logo.svg" "Release_Artifacts/DrawIt_logo.svg" -Force
-          Copy-Item "README.md" "Release_Artifacts/README.md" -Force
-          Copy-Item "README.en.md" "Release_Artifacts/README.en.md" -Force
-          Compress-Archive -Path "Release_Artifacts/*" -DestinationPath "Standalone_Files.zip" -Force
 
-      - name: Build MSIX and Inno Setup packages
+      - name: Build Microsoft Store MSIX package
         shell: powershell
         run: |
-          choco install innosetup --no-progress
-          powershell -ExecutionPolicy Bypass -File packaging\build-packages.ps1 -SkipReleaseBuild
+          powershell -ExecutionPolicy Bypass -File build-msix.ps1
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             Release_Artifacts/DrawIt.exe
-            Standalone_Files.zip
             DrawIt.msix
-            DrawIt-Setup.exe
+            DrawIt - Draw on Screen Installer.exe
           generate_release_notes: true

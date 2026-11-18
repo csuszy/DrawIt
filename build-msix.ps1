@@ -97,6 +97,17 @@ if ($manifestContent -match '\[IDE_IRD_A_PACKAGE_IDENTITY_NAME_ERTEKET\]') {
     $manifestContent = $manifestContent -replace '\[IDE_IRD_A_PACKAGE_IDENTITY_NAME_ERTEKET\]', 'csuszy.DrawIt-DrawonScreen'
     $manifestContent = $manifestContent -replace 'CN=\[IDE_IRD_A_PUBLISHER_CN_ERTEKET\]', 'CN=0D299B98-5051-435C-8BB5-970045368EEC'
 }
+# Verzio szinkronizalasa a Cargo.toml alapjan
+$cargoToml = Get-Content "Cargo.toml" -Raw
+if ($cargoToml -match '(?m)^version\s*=\s*"([^"]+)"') {
+    $rawVer = $matches[1]
+    $verParts = $rawVer.Split('.')
+    while ($verParts.Count -lt 4) { $verParts += "0" }
+    $msixVer = ($verParts[0..3]) -join '.'
+    $manifestContent = [regex]::Replace($manifestContent, 'Version="[0-9.]+"', "Version=""$msixVer""")
+    Write-Host "   MSIX Verzio automatikusan szinkronizalva a Cargo.toml alapjan: $msixVer" -ForegroundColor Green
+}
+
 Set-Content -Path "$StagingDir\AppxManifest.xml" -Value $manifestContent -Encoding UTF8
 
 # 3. Legfrissebb makeappx.exe megkeresese (Windows Kits alatt, szukseg eseten fallback)

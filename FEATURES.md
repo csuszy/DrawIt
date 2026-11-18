@@ -130,7 +130,8 @@ DrawIt provides 12 specialized tools, each instantly accessible via configurable
 * **Purpose**: Region capture and instant export.
 * **Behavior**: Drag to select any rectangle. The surrounding desktop dims with a vignette mask, and an action bar pops up below the selection.
 * **Action Bar Options**:
-  - **Copy (`Ctrl + C`)**: Places the capture on the Windows clipboard.
+  - **Copy (`Ctrl + C`)**: Places the image capture on the Windows clipboard.
+  - **Copy Text (OCR)**: Automatically appears when Windows OCR is supported. Recognizes text in the cropped region using native `Windows.Media.Ocr`, copies text directly to the clipboard (`CF_UNICODETEXT`), and closes the overlay for instant pasting.
   - **Save PNG (`Ctrl + S`)**: Prompts to save as a lossless PNG file.
   - **Save PDF**: Generates a single-page vector-fitted PDF document.
   - **Cancel (`Esc`)**: Discards the selection.
@@ -245,7 +246,7 @@ All 12 tool keys support dual operation:
 Accessible from the Logo menu or the System Tray right-click menu:
 
 ### 1. General Tab
-* **Language Switcher**: Toggle dynamically between **Magyar** and **English** with zero restart.
+* **Language Switcher**: Automatically follows your Windows system language (launches in Hungarian if the OS is Hungarian; English for all other systems). Switch between **Magyar** and **English** anytime with one click.
 * **Global Activation Hotkey**: Choose your preferred global trigger:
   - `Ctrl + 2` (Default)
   - `F8`

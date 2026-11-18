@@ -1,6 +1,7 @@
 use std::mem;
 use std::ptr;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::Registry::{
@@ -11,7 +12,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_WIN,
 };
 use windows::Win32::UI::Shell::{
-    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
+    Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_INFO, NIM_ADD, NIM_DELETE,
+    NIM_MODIFY, NOTIFYICONDATAW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
@@ -380,6 +382,10 @@ pub fn init_tray_and_hotkeys(overlay_hwnd: HWND) -> Option<HWND> {
         let state = Box::new(TrayState::new(hwnd, overlay_hwnd));
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(state) as isize);
 
+        if let Ok(mut guard) = GLOBAL_TRAY_HWND.lock() {
+            *guard = Some(hwnd.0 as isize);
+        }
+
         // Register Global Hotkeys:
         // 1. Primary: Ctrl + 2
         let _ = RegisterHotKey(hwnd, HOTKEY_CTRL_2, MOD_CONTROL | MOD_NOREPEAT, 0x32);
@@ -391,5 +397,33 @@ pub fn init_tray_and_hotkeys(overlay_hwnd: HWND) -> Option<HWND> {
         let _ = RegisterHotKey(hwnd, HOTKEY_F8, MOD_NOREPEAT, 0x77);
 
         Some(hwnd)
+    }
+}
+
+static GLOBAL_TRAY_HWND: Mutex<Option<isize>> = Mutex::new(None);
+
+pub fn show_tray_balloon(title: &str, message: &str) {
+    if let Ok(guard) = GLOBAL_TRAY_HWND.lock() {
+        if let Some(val) = *guard {
+            unsafe {
+                let mut nid: NOTIFYICONDATAW = mem::zeroed();
+                nid.cbSize = mem::size_of::<NOTIFYICONDATAW>() as u32;
+                nid.hWnd = HWND(val as *mut core::ffi::c_void);
+                nid.uID = 1;
+                nid.uFlags = NIF_INFO;
+                nid.dwInfoFlags = NIIF_INFO;
+
+                let title_u16: Vec<u16> = title.encode_utf16().collect();
+                let msg_u16: Vec<u16> = message.encode_utf16().collect();
+
+                let t_len = title_u16.len().min(nid.szInfoTitle.len() - 1);
+                nid.szInfoTitle[..t_len].copy_from_slice(&title_u16[..t_len]);
+
+                let m_len = msg_u16.len().min(nid.szInfo.len() - 1);
+                nid.szInfo[..m_len].copy_from_slice(&msg_u16[..m_len]);
+
+                let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+            }
+        }
     }
 }

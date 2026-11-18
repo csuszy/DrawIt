@@ -38,6 +38,7 @@ pub static IS_OVERLAY_OPEN: AtomicBool = AtomicBool::new(false);
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum SnipAction {
     Copy,
+    CopyText,
     SavePng,
     SavePdf,
     Cancel,
@@ -224,7 +225,8 @@ impl OverlayState {
         let sw = self.capture.width as f32;
         let sh = self.capture.height as f32;
 
-        let bar_w = 368.0;
+        let has_ocr = crate::ocr::is_ocr_supported();
+        let bar_w = if has_ocr { 504.0 } else { 368.0 };
         let bar_h = 40.0;
         let bar_x = sl.clamp(10.0, sw - bar_w - 10.0);
         let bar_y = (sb + 8.0).min(sh - bar_h - 10.0);
@@ -233,10 +235,33 @@ impl OverlayState {
         let btn_h = 32.0;
 
         let mut actions = Vec::new();
-        actions.push((SnipAction::Copy, (bar_x + 6.0, btn_y, bar_x + 94.0, btn_y + btn_h)));
-        actions.push((SnipAction::SavePng, (bar_x + 98.0, btn_y, bar_x + 182.0, btn_y + btn_h)));
-        actions.push((SnipAction::SavePdf, (bar_x + 186.0, btn_y, bar_x + 270.0, btn_y + btn_h)));
-        actions.push((SnipAction::Cancel, (bar_x + 274.0, btn_y, bar_x + 362.0, btn_y + btn_h)));
+        let mut cur_x = bar_x + 6.0;
+
+        // 1. Copy Image
+        let w_copy = 84.0;
+        actions.push((SnipAction::Copy, (cur_x, btn_y, cur_x + w_copy, btn_y + btn_h)));
+        cur_x += w_copy + 4.0;
+
+        // 2. Copy Text via OCR (if supported by Windows)
+        if has_ocr {
+            let w_ocr = 132.0;
+            actions.push((SnipAction::CopyText, (cur_x, btn_y, cur_x + w_ocr, btn_y + btn_h)));
+            cur_x += w_ocr + 4.0;
+        }
+
+        // 3. Save PNG
+        let w_png = 84.0;
+        actions.push((SnipAction::SavePng, (cur_x, btn_y, cur_x + w_png, btn_y + btn_h)));
+        cur_x += w_png + 4.0;
+
+        // 4. Save PDF
+        let w_pdf = 84.0;
+        actions.push((SnipAction::SavePdf, (cur_x, btn_y, cur_x + w_pdf, btn_y + btn_h)));
+        cur_x += w_pdf + 4.0;
+
+        // 5. Cancel
+        let w_cancel = 84.0;
+        actions.push((SnipAction::Cancel, (cur_x, btn_y, cur_x + w_cancel, btn_y + btn_h)));
 
         Some(((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), actions))
     }
@@ -780,8 +805,14 @@ impl OverlayState {
             d2d.fill_rounded_rectangle(pill_l - 2.0, pill_t + 2.0, pill_r + 2.0, pill_b + 4.0, radius, (0.0, 0.0, 0.0, 0.35));
             // Translucent dark frosted background
             d2d.fill_rounded_rectangle(pill_l, pill_t, pill_r, pill_b, radius, (0.07, 0.09, 0.14, 0.94));
-            // Soft border highlight
-            d2d.draw_rounded_rectangle(pill_l, pill_t, pill_r, pill_b, radius, (0.22, 0.74, 0.97, 0.70), 1.2);
+            // Soft border highlight (amber-orange for errors/warnings, blue for success/info)
+            let is_err = msg.contains("Sikertelen") || msg.contains("Nem található") || msg.contains("Túl kicsi") || msg.contains("failed") || msg.contains("No text") || msg.contains("too small");
+            let border_col = if is_err {
+                (1.0, 0.45, 0.20, 0.85)
+            } else {
+                (0.22, 0.74, 0.97, 0.70)
+            };
+            d2d.draw_rounded_rectangle(pill_l, pill_t, pill_r, pill_b, radius, border_col, 1.2);
             // Centered text
             d2d.draw_text_simple(msg, pill_l + 12.0, pill_t + 2.0, pill_r - 12.0, pill_b - 2.0, 13.5, (1.0, 1.0, 1.0, 0.98), true, true);
         }
@@ -1196,17 +1227,61 @@ impl OverlayState {
             d2d.draw_text_simple(lang.settings_autostart(), left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
             cur_y += 34.0;
 
-            // Toggle 2: Auto check update
+            // Toggle 2: Auto check update / Store update button
             let cb_y2 = cur_y + 2.0;
-            if self.temp_settings.check_updates {
-                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
-                d2d.draw_checkmark_icon(left_x + 8.0 + check_box_size / 2.0, cb_y2 + check_box_size / 2.0, 8.0, (1.0, 1.0, 1.0, 1.0), 1.8);
-            } else {
-                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
-                d2d.draw_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+            #[cfg(feature = "store")]
+            {
+                d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2 - 2.0, right_x - 8.0, cb_y2 + check_box_size + 4.0, 6.0, (0.04, 0.52, 1.0, 0.15));
+                d2d.draw_rounded_rectangle(left_x + 8.0, cb_y2 - 2.0, right_x - 8.0, cb_y2 + check_box_size + 4.0, 6.0, (0.04, 0.52, 1.0, 0.40), 1.0);
+                d2d.draw_refresh_icon(left_x + 22.0, cb_y2 + check_box_size / 2.0 + 1.0, (0.22, 0.74, 0.97, 1.0), 1.3);
+                d2d.draw_text_simple(lang.settings_check_updates(), left_x + 36.0, cur_y + 2.0, right_x - 12.0, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
             }
-            d2d.draw_text_simple(lang.settings_check_updates(), left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
-            cur_y += 44.0;
+            #[cfg(not(feature = "store"))]
+            {
+                if self.temp_settings.check_updates {
+                    d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (0.04, 0.52, 1.0, 0.95));
+                    d2d.draw_checkmark_icon(left_x + 8.0 + check_box_size / 2.0, cb_y2 + check_box_size / 2.0, 8.0, (1.0, 1.0, 1.0, 1.0), 1.8);
+                } else {
+                    d2d.fill_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.08));
+                    d2d.draw_rounded_rectangle(left_x + 8.0, cb_y2, left_x + 8.0 + check_box_size, cb_y2 + check_box_size, 4.0, (1.0, 1.0, 1.0, 0.25), 1.0);
+                }
+                d2d.draw_text_simple(lang.settings_check_updates(), left_x + 36.0, cur_y + 2.0, right_x, cur_y + 24.0, 12.0, (0.88, 0.90, 0.94, 1.0), false, false);
+            }
+            cur_y += 38.0;
+
+            // Separator line 3
+            d2d.draw_line(mx + 20.0, cur_y, mx + mw - 20.0, cur_y, (1.0, 1.0, 1.0, 0.08), 1.0);
+            cur_y += 14.0;
+
+            // SECTION 4: OCR Status Card
+            d2d.draw_text_simple(lang.settings_section_ocr(), left_x, cur_y, right_x, cur_y + 18.0, 12.5, (0.22, 0.74, 0.97, 1.0), true, false);
+            cur_y += 24.0;
+
+            let ocr_status = crate::ocr::get_ocr_status();
+            let card_x1 = start_btn_x;
+            let card_x2 = right_x - 8.0;
+            let card_y1 = cur_y;
+            let card_y2 = card_y1 + 54.0;
+
+            if ocr_status.is_supported {
+                // Active green-tinted card
+                d2d.fill_rounded_rectangle(card_x1, card_y1, card_x2, card_y2, 8.0, (0.10, 0.45, 0.25, 0.25));
+                d2d.draw_rounded_rectangle(card_x1, card_y1, card_x2, card_y2, 8.0, (0.25, 0.85, 0.45, 0.60), 1.0);
+                d2d.draw_copy_text_icon(card_x1 + 20.0, (card_y1 + card_y2) / 2.0, (0.40, 1.0, 0.60, 1.0), 1.5);
+
+                let title = lang.settings_ocr_active(&ocr_status.language_tag);
+                d2d.draw_text_simple(&title, card_x1 + 38.0, card_y1 + 8.0, card_x2 - 12.0, card_y1 + 26.0, 12.0, (0.40, 1.0, 0.60, 1.0), true, false);
+                d2d.draw_text_simple(lang.settings_ocr_active_desc(), card_x1 + 38.0, card_y1 + 28.0, card_x2 - 12.0, card_y2 - 6.0, 11.0, (0.80, 0.84, 0.90, 1.0), false, false);
+            } else {
+                // Inactive amber/gray card
+                d2d.fill_rounded_rectangle(card_x1, card_y1, card_x2, card_y2, 8.0, (0.45, 0.25, 0.10, 0.25));
+                d2d.draw_rounded_rectangle(card_x1, card_y1, card_x2, card_y2, 8.0, (0.85, 0.50, 0.20, 0.60), 1.0);
+                d2d.draw_copy_text_icon(card_x1 + 20.0, (card_y1 + card_y2) / 2.0, (1.0, 0.65, 0.35, 1.0), 1.5);
+
+                d2d.draw_text_simple(lang.settings_ocr_inactive(), card_x1 + 38.0, card_y1 + 8.0, card_x2 - 12.0, card_y1 + 26.0, 12.0, (1.0, 0.65, 0.35, 1.0), true, false);
+                d2d.draw_text_simple(lang.settings_ocr_inactive_desc(), card_x1 + 38.0, card_y1 + 28.0, card_x2 - 12.0, card_y2 - 6.0, 11.0, (0.80, 0.84, 0.90, 1.0), false, false);
+            }
+            cur_y += 66.0;
 
             d2d.draw_text_simple(lang.settings_portable_note(), left_x + 8.0, cur_y, right_x, cur_y + 16.0, 11.0, (0.60, 0.64, 0.72, 1.0), false, false);
         } else {
@@ -1546,6 +1621,17 @@ impl OverlayState {
                         d2d.draw_clipboard_icon(btn_l + 16.0, (btn_t + btn_b) / 2.0, col, 1.5);
                         d2d.draw_text_simple(self.toolbar.language.snip_copy(), btn_l + 26.0, btn_t, btn_r - 4.0, btn_b, 12.0, col, is_hov, true);
                     }
+                    SnipAction::CopyText => {
+                        let (bg, border, col) = if is_hov {
+                            ((0.35, 0.22, 0.85, 0.45), (0.55, 0.42, 1.0, 0.90), (0.75, 0.65, 1.0, 1.0))
+                        } else {
+                            ((1.0, 1.0, 1.0, 0.06), (1.0, 1.0, 1.0, 0.10), (0.85, 0.88, 0.92, 1.0))
+                        };
+                        d2d.fill_rounded_rectangle(btn_l, btn_t, btn_r, btn_b, 7.0, bg);
+                        d2d.draw_rounded_rectangle(btn_l, btn_t, btn_r, btn_b, 7.0, border, 1.2);
+                        d2d.draw_copy_text_icon(btn_l + 16.0, (btn_t + btn_b) / 2.0, col, 1.5);
+                        d2d.draw_text_simple(self.toolbar.language.snip_copy_text(), btn_l + 26.0, btn_t, btn_r - 4.0, btn_b, 12.0, col, is_hov, true);
+                    }
                     SnipAction::SavePng => {
                         let (bg, border, col) = if is_hov {
                             ((0.08, 0.48, 0.90, 0.45), (0.20, 0.70, 1.0, 0.90), (0.40, 0.85, 1.0, 1.0))
@@ -1627,6 +1713,36 @@ impl OverlayState {
                 self.snip_rect = None;
                 self.hovered_snip_action = None;
                 self.toolbar.active_tool = ToolMode::Freehand;
+                true
+            }
+            SnipAction::CopyText => {
+                if cw < 16 || ch < 16 {
+                    self.show_toast(self.toolbar.language.toast_ocr_too_small());
+                    return true;
+                }
+
+                let result = crate::ocr::recognize_text_from_bgra(cw, ch, &cropped_bgra);
+                match result {
+                    Ok(Some(text)) => {
+                        crate::utils::copy_text_to_clipboard(self.hwnd, &text);
+                        self.show_toast(self.toolbar.language.toast_ocr_copied());
+                        crate::tray::show_tray_balloon(
+                            "DrawIt",
+                            self.toolbar.language.toast_ocr_copied(),
+                        );
+                        // Brief wait so the user clearly sees the success toast on screen before closing
+                        std::thread::sleep(std::time::Duration::from_millis(700));
+                        hide_overlay(self);
+                    }
+                    Ok(None) => {
+                        self.show_toast(self.toolbar.language.toast_ocr_no_text());
+                        // Keep overlay open so user can re-select or try again
+                    }
+                    Err(_) => {
+                        self.show_toast(self.toolbar.language.toast_ocr_failed());
+                        // Keep overlay open on error
+                    }
+                }
                 true
             }
             SnipAction::SavePng => {
@@ -2046,7 +2162,14 @@ pub unsafe extern "system" fn overlay_wndproc(
                                 }
 
                                 if mx >= ctrls.upd_r.0 && mx <= ctrls.upd_r.2 && my >= ctrls.upd_r.1 && my <= ctrls.upd_r.3 {
-                                    state.temp_settings.check_updates = !state.temp_settings.check_updates;
+                                    #[cfg(feature = "store")]
+                                    {
+                                        crate::updater::prompt_and_update(state.hwnd, true);
+                                    }
+                                    #[cfg(not(feature = "store"))]
+                                    {
+                                        state.temp_settings.check_updates = !state.temp_settings.check_updates;
+                                    }
                                     state.render();
                                     return LRESULT(0);
                                 }
@@ -2099,7 +2222,9 @@ pub unsafe extern "system" fn overlay_wndproc(
 
             // Check snip action bar click first if snip rect is visible
             if state.toolbar.active_tool == ToolMode::Snip && state.handle_snip_click(mx, my) {
-                state.render();
+                if IS_OVERLAY_OPEN.load(Ordering::SeqCst) {
+                    state.render();
+                }
                 return LRESULT(0);
             }
 
@@ -3006,6 +3131,7 @@ pub fn show_overlay(hwnd: HWND) {
             let lang = crate::settings::get_settings().language;
             state.toolbar.language = lang;
 
+            #[cfg(not(feature = "store"))]
             if let Some(update) = crate::updater::get_available_update() {
                 state.show_toast(&lang.toast_update_available(&update.tag));
             }

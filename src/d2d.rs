@@ -563,6 +563,17 @@ impl D2DContext {
         self.draw_line(cx - 2.5, cy + 2.2, cx + 2.5, cy + 2.2, color, stroke_width * 0.9);
     }
 
+    pub fn draw_copy_text_icon(&self, cx: f32, cy: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
+        // Back document sheet (top-right)
+        self.draw_rounded_rectangle(cx - 2.0, cy - 6.0, cx + 5.5, cy + 2.5, 1.2, color, stroke_width * 0.9);
+        // Front document sheet (bottom-left)
+        self.draw_rounded_rectangle(cx - 5.5, cy - 2.5, cx + 2.0, cy + 6.0, 1.2, color, stroke_width);
+        // Horizontal text lines inside front document
+        self.draw_line(cx - 3.8, cy - 0.2, cx + 0.3, cy - 0.2, color, stroke_width * 0.85);
+        self.draw_line(cx - 3.8, cy + 2.0, cx + 0.3, cy + 2.0, color, stroke_width * 0.85);
+        self.draw_line(cx - 3.8, cy + 4.2, cx - 1.0, cy + 4.2, color, stroke_width * 0.85);
+    }
+
     pub fn draw_pdf_doc_icon(&self, cx: f32, cy: f32, color: (f32, f32, f32, f32), stroke_width: f32) {
         // Page outline with dog-ear at top-right
         self.draw_line(cx - 4.5, cy - 5.5, cx + 1.5, cy - 5.5, color, stroke_width);

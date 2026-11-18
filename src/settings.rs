@@ -17,7 +17,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            language: Language::Hu,
+            language: Language::default(),
             global_hotkey: "Ctrl+2".to_string(),
             autostart: false,
             check_updates: true,

@@ -1,16 +1,39 @@
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Language {
-    #[default]
     Hu,
     En,
 }
 
+impl Default for Language {
+    fn default() -> Self {
+        Self::detect_system()
+    }
+}
+
 #[allow(dead_code)]
 impl Language {
+    /// Detects Windows system UI language:
+    /// Hungarian (0x000E) -> Language::Hu, anything else -> Language::En
+    pub fn detect_system() -> Self {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetUserDefaultUILanguage() -> u16;
+        }
+        let lang_id = unsafe { GetUserDefaultUILanguage() };
+        let primary_lang = lang_id & 0x03FF;
+        if primary_lang == 0x000E {
+            Language::Hu
+        } else {
+            Language::En
+        }
+    }
+
     pub fn from_str(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
             "en" | "english" => Language::En,
-            _ => Language::Hu,
+            "hu" | "hungarian" => Language::Hu,
+            "system" | "auto" => Language::detect_system(),
+            _ => Language::detect_system(),
         }
     }
 
@@ -65,9 +88,19 @@ impl Language {
     }
 
     pub fn menu_check_updates(&self) -> &'static str {
-        match self {
-            Language::Hu => "Frissítések keresése...",
-            Language::En => "Check for Updates...",
+        #[cfg(feature = "store")]
+        {
+            match self {
+                Language::Hu => "Frissítések keresése (Microsoft Store)...",
+                Language::En => "Check for Updates (Microsoft Store)...",
+            }
+        }
+        #[cfg(not(feature = "store"))]
+        {
+            match self {
+                Language::Hu => "Frissítések keresése...",
+                Language::En => "Check for Updates...",
+            }
         }
     }
 
@@ -156,6 +189,13 @@ impl Language {
         }
     }
 
+    pub fn snip_copy_text(&self) -> &'static str {
+        match self {
+            Language::Hu => "Szöveg Másolás",
+            Language::En => "Copy Text",
+        }
+    }
+
     pub fn snip_save_png(&self) -> &'static str {
         match self {
             Language::Hu => "Mentés PNG",
@@ -224,6 +264,34 @@ impl Language {
         match self {
             Language::Hu => "Kivágott terület másolva a vágólapra!",
             Language::En => "Snipped region copied to clipboard!",
+        }
+    }
+
+    pub fn toast_ocr_copied(&self) -> &'static str {
+        match self {
+            Language::Hu => "Szöveg sikeresen másolva a vágólapra!",
+            Language::En => "Text successfully copied to clipboard!",
+        }
+    }
+
+    pub fn toast_ocr_too_small(&self) -> &'static str {
+        match self {
+            Language::Hu => "Túl kicsi a kép a felismeréshez!",
+            Language::En => "Image is too small for recognition!",
+        }
+    }
+
+    pub fn toast_ocr_no_text(&self) -> &'static str {
+        match self {
+            Language::Hu => "Sikertelen felismerés (nem található szöveg)!",
+            Language::En => "Recognition failed (no text detected)!",
+        }
+    }
+
+    pub fn toast_ocr_failed(&self) -> &'static str {
+        match self {
+            Language::Hu => "Sikertelen felismerés (OCR hiba)!",
+            Language::En => "Recognition failed (OCR error)!",
         }
     }
 
@@ -467,9 +535,54 @@ impl Language {
     }
 
     pub fn settings_check_updates(&self) -> &'static str {
+        #[cfg(feature = "store")]
+        {
+            match self {
+                Language::Hu => "Frissítések keresése a Microsoft Store-ban (Megnyitás)",
+                Language::En => "Check for updates in Microsoft Store (Open Store)",
+            }
+        }
+        #[cfg(not(feature = "store"))]
+        {
+            match self {
+                Language::Hu => "Frissítések automatikus keresése indításkor (GitHub Releases)",
+                Language::En => "Automatically check for updates on startup (GitHub Releases)",
+            }
+        }
+    }
+
+    pub fn settings_section_ocr(&self) -> &'static str {
         match self {
-            Language::Hu => "Frissítések automatikus keresése indításkor (GitHub Releases)",
-            Language::En => "Automatically check for updates on startup (GitHub Releases)",
+            Language::Hu => "Optikai szövegfelismerés (OCR állapot)",
+            Language::En => "Optical Character Recognition (OCR Status)",
+        }
+    }
+
+    pub fn settings_ocr_active(&self, lang_tag: &str) -> String {
+        match self {
+            Language::Hu => format!("Elérhető és működik (Windows natív motor: {})", lang_tag),
+            Language::En => format!("Available and active (Windows native engine: {})", lang_tag),
+        }
+    }
+
+    pub fn settings_ocr_active_desc(&self) -> &'static str {
+        match self {
+            Language::Hu => "A Képmetsző (Snip) kijelölésnél megjelenik a 'Szöveg Másolás' gomb a vágólapra mentéshez.",
+            Language::En => "The 'Copy Text' button is enabled in the Snipping tool for direct clipboard copy.",
+        }
+    }
+
+    pub fn settings_ocr_inactive(&self) -> &'static str {
+        match self {
+            Language::Hu => "Nem érhető el (Nincs telepítve Windows OCR nyelvi csomag)",
+            Language::En => "Not available (No Windows OCR language package installed)",
+        }
+    }
+
+    pub fn settings_ocr_inactive_desc(&self) -> &'static str {
+        match self {
+            Language::Hu => "Telepíts OCR nyelvi csomagot a Windows Gépházban (Idő és nyelv -> Nyelv).",
+            Language::En => "Install an OCR language package in Windows Settings (Time & Language -> Language).",
         }
     }
 
@@ -519,7 +632,7 @@ impl Language {
                 "• Ív: Húzzon egy vonalat, engedje fel az egeret, hajlítsa meg a kurzorral, majd kattintson",
                 "• Szöveg: Kattintson bárhová és gépeljen közvetlenül a vászonra (Enter lezár)",
                 "• Elmosás: Érzékeny adatok, képernyőterületek azonnali elhomályosítása",
-                "• Kivágás: Képernyőrészlet kijelölése másoláshoz vagy fájlba mentéshez",
+                "• Kivágás: Képernyőrészlet kijelölése kép- vagy Szöveg Másoláshoz (OCR), mentéshez",
             ],
             Language::En => &[
                 "• Pen / Line / Arrow: Freehand drawing, straight lines and directional arrows",
@@ -529,7 +642,7 @@ impl Language {
                 "• Curved Arrow/Line: Drag line, release, bend with mouse cursor, click to finish",
                 "• Text: Click anywhere and type directly onto the screen (press Enter to commit)",
                 "• Blur: Instantly blur out sensitive screen details and personal info",
-                "• Snip: Select any rectangular region to copy to clipboard or export",
+                "• Snip: Select rectangular region to copy, Copy Text (OCR), or export",
             ],
         }
     }
@@ -629,9 +742,19 @@ impl Language {
     }
 
     pub fn tray_updates(&self) -> &'static str {
-        match self {
-            Language::Hu => "Frissítések keresése...",
-            Language::En => "Check for Updates...",
+        #[cfg(feature = "store")]
+        {
+            match self {
+                Language::Hu => "Frissítések keresése (Microsoft Store)...",
+                Language::En => "Check for Updates (Microsoft Store)...",
+            }
+        }
+        #[cfg(not(feature = "store"))]
+        {
+            match self {
+                Language::Hu => "Frissítések keresése...",
+                Language::En => "Check for Updates...",
+            }
         }
     }
 
@@ -713,15 +836,31 @@ impl Language {
     }
 
     pub fn updater_latest_msg(&self, cur: &str) -> String {
-        match self {
-            Language::Hu => format!(
-                "A legújabb DrawIt verziót használod (v{}).\nNincs újabb frissítés a GitHubon.",
-                cur
-            ),
-            Language::En => format!(
-                "You are already using the latest DrawIt version (v{}).\nNo newer update available on GitHub.",
-                cur
-            ),
+        #[cfg(feature = "store")]
+        {
+            match self {
+                Language::Hu => format!(
+                    "A legújabb DrawIt verziót használod (v{}).\nNincs újabb frissítés a Microsoft Store-ban.",
+                    cur
+                ),
+                Language::En => format!(
+                    "You are already using the latest DrawIt version (v{}).\nNo newer update available on Microsoft Store.",
+                    cur
+                ),
+            }
+        }
+        #[cfg(not(feature = "store"))]
+        {
+            match self {
+                Language::Hu => format!(
+                    "A legújabb DrawIt verziót használod (v{}).\nNincs újabb frissítés a GitHubon.",
+                    cur
+                ),
+                Language::En => format!(
+                    "You are already using the latest DrawIt version (v{}).\nNo newer update available on GitHub.",
+                    cur
+                ),
+            }
         }
     }
 
@@ -779,13 +918,16 @@ mod tests {
 
     #[test]
     fn test_language_parsing_and_names() {
+        let sys_lang = Language::detect_system();
+        println!("Detected Windows system language: {:?}", sys_lang);
+        assert_eq!(Language::default(), sys_lang);
         assert_eq!(Language::from_str("hu"), Language::Hu);
         assert_eq!(Language::from_str("HU"), Language::Hu);
         assert_eq!(Language::from_str("hungarian"), Language::Hu);
-        assert_eq!(Language::from_str("unknown"), Language::Hu);
         assert_eq!(Language::from_str("en"), Language::En);
         assert_eq!(Language::from_str("EN"), Language::En);
         assert_eq!(Language::from_str("english"), Language::En);
+        assert_eq!(Language::from_str("unknown"), sys_lang);
 
         assert_eq!(Language::Hu.as_str(), "hu");
         assert_eq!(Language::En.as_str(), "en");

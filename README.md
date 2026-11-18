@@ -143,9 +143,9 @@ A Dokkoló logó menüjéből vagy a tálca jobbklikkes menüjéből elérhető 
 
 A DrawIt többféle formátumban érhető el a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalon:
 
-* **Hordozható változat (Portable - Ajánlott)**: `DrawIt.exe` vagy `Standalone_Files.zip` – nincs telepítés, pendrive-ról is azonnal fut.
-* **Microsoft Store / MSIX csomag**: [Telepítés a Microsoft Store-ból](ms-windows-store://pdp/?productid=9NHQC57FT5LQ) vagy letölthető a `DrawIt.msix` csomag.
-* **Windows Telepítő**: `DrawIt-Setup.exe` – hagyományos varázslós telepítő start menü ikonnal (nem igényel rendszergazdai jogot, felhasználói szinten települ).
+* **Hordozható változat (Portable - Ajánlott)**: `DrawIt.exe` – nincs telepítés, pendrive-ról is azonnal fut, beépített frissítéskezelővel.
+* **Microsoft Store / MSIX csomag**: [Telepítés a Microsoft Store-ból](ms-windows-store://pdp/?productid=9NHQC57FT5LQ) vagy közvetlenül telepíthető a `DrawIt.msix` csomag.
+* **Microsoft Store Telepítő**: `DrawIt - Draw on Screen Installer.exe` – a Microsoft Store hivatalos telepítője.
 
 ### Közvetlen indítás
 1. Töltse le a kívánt változatot a [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest) oldalról.

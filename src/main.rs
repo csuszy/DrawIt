@@ -3,6 +3,7 @@
 mod d2d;
 mod i18n;
 mod models;
+mod ocr;
 mod overlay;
 mod pdf;
 mod screen;

@@ -1,7 +1,7 @@
 # DrawIt Automated Packaging Script
-# Generates both:
+# Generates:
 #   1. DrawIt.msix       (Modern Windows App / Microsoft Store package)
-#   2. DrawIt-Setup.exe  (Inno Setup per-user installer / Microsoft Store Win32 installer)
+# Note: Inno Setup installer and standalone zip are retired in favor of Portable, MSIX and MS Store Installer.
 
 param(
     [switch]$SkipReleaseBuild = $false,
@@ -120,21 +120,7 @@ if ($MakeAppx) {
     Write-Warning "MakeAppx.exe not found. MSIX creation skipped."
 }
 
-# 4. Build Inno Setup Installer
-Write-Host "[4/4] Building Inno Setup Installer (ISCC)..." -ForegroundColor Yellow
-$IsccCandidates = @(
-    "C:\Users\bcsas\AppData\Local\Programs\Inno Setup 6\ISCC.exe",
-    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-)
-$Iscc = $IsccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if ($Iscc) {
-    $issFile = Join-Path $ScriptDir "inno\drawit_setup.iss"
-    & $Iscc $issFile | Out-Null
-    $setupExe = Join-Path $RootDir "DrawIt-Setup.exe"
-    Write-Host "   Created: $setupExe" -ForegroundColor Green
-} else {
-    Write-Warning "ISCC.exe not found. Inno Setup installer skipped."
-}
+# 4. Inno Setup installer skipped (only Portable, MSIX and MS Store Installer released)
+Write-Host "[4/4] Inno Setup installer skipped (releases are Portable and MSIX only)." -ForegroundColor Gray
 
 Write-Host "`nAll packages built successfully!" -ForegroundColor Cyan

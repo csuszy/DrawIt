@@ -142,6 +142,35 @@ pub fn copy_bgra_to_clipboard(hwnd: HWND, width: u32, height: u32, bgra_pixels: 
     }
 }
 
+pub fn copy_text_to_clipboard(hwnd: HWND, text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+
+    let utf16: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+    let size = utf16.len() * 2;
+
+    unsafe {
+        if OpenClipboard(hwnd).is_err() {
+            return false;
+        }
+        let _ = EmptyClipboard();
+
+        if let Ok(handle) = GlobalAlloc(GMEM_MOVEABLE, size) {
+            let ptr = GlobalLock(handle) as *mut u16;
+            if !ptr.is_null() {
+                ptr::copy_nonoverlapping(utf16.as_ptr(), ptr, utf16.len());
+                let _ = GlobalUnlock(handle);
+                // CF_UNICODETEXT = 13
+                let _ = SetClipboardData(13, HANDLE(handle.0));
+            }
+        }
+
+        let _ = CloseClipboard();
+        true
+    }
+}
+
 pub fn prompt_save_file_path(
     owner_hwnd: HWND,
     default_filename: &str,

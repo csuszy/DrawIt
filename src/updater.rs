@@ -51,20 +51,25 @@ pub fn prompt_and_update(parent: HWND, _manual: bool) {
         let uri = format!("ms-windows-store://pdp/?productid={}", STORE_PRODUCT_ID);
         let uri_w = to_wide(&uri);
         let open_verb = to_wide("open");
-        unsafe {
-            let _ = ShellExecuteW(
-                parent,
-                PCWSTR(open_verb.as_ptr()),
-                PCWSTR(uri_w.as_ptr()),
-                PCWSTR::null(),
-                PCWSTR::null(),
-                SW_SHOWNORMAL,
-            );
-        }
+        let parent_raw = parent.0 as usize;
+        std::thread::spawn(move || {
+            let parent = HWND(parent_raw as *mut _);
+            unsafe {
+                let _ = ShellExecuteW(
+                    parent,
+                    PCWSTR(open_verb.as_ptr()),
+                    PCWSTR(uri_w.as_ptr()),
+                    PCWSTR::null(),
+                    PCWSTR::null(),
+                    SW_SHOWNORMAL,
+                );
+            }
+        });
     }
 }
 
 #[cfg(feature = "store")]
+#[allow(dead_code)]
 pub fn get_available_update() -> Option<UpdateInfo> {
     None
 }

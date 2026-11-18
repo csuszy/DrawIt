@@ -130,7 +130,8 @@ A DrawIt tizenkét dedikált eszközt biztosít, amelyek a billentyűzetről azo
 * **Mire való**: Képernyőrészlet gyors kivágása és közvetlen exportálása.
 * **Működése**: Átlós húzással kijelölhető a kívánt képernyőrészlet. A kijelölés alatt az asztal többi része sötétített maszkot kap, a kivágott terület alatt pedig megjelenik egy lebegő akciósáv.
 * **Akciógombok**:
-  - **Másolás (`Ctrl + C`)**: Azonnal vágólapra helyezi a kivágást.
+  - **Másolás (`Ctrl + C`)**: Azonnal vágólapra helyezi a képi kivágást.
+  - **Szöveg Másolás (OCR)**: Ha a Windows rendszer támogatja a szövegfelismerést, ez a gomb automatikusan megjelenik. Egy kattintással felismeri a területen lévő szöveget a beépített natív `Windows.Media.Ocr` motorral, közvetlenül a vágólapra másolja a szöveget, és azonnal bezárja a rajzfelületet a zökkenőmentes beillesztéshez.
   - **Mentés PNG (`Ctrl + S`)**: Mentés veszteségmentes PNG képfájlba.
   - **Mentés PDF**: Vektoros, méretarányos PDF dokumentum létrehozása.
   - **Mégse (`Esc`)**: Kijelölés elvetése.
@@ -251,7 +252,7 @@ A DrawIt egyik legkényelmesebb funkciója:
 A Dokkoló Logo menüjéből vagy a Rendszertálca ikon jobbklikkes menüjéből elérhető a **Beállítások** ablak, amely két fülre tagolódik:
 
 ### 1. Általános Fül (General)
-* **Nyelvválasztás**: Valós idejű váltás a **Magyar** és az **English** nyelv között (újraindítás nélkül azonnal érvénybe lép).
+* **Nyelvválasztás**: Automatikusan a Windows rendszer nyelvéhez igazodik (ha magyar a Windows, magyarul indul; bármely más rendszer esetén angolul). A felhasználó valós időben, egyetlen kattintással bármikor válthat a **Magyar** és az **English** felület között.
 * **Globális indítóbillentyű (Global Hotkey)**:
   - Kiválasztható a számodra legkényelmesebb billentyűkombináció a rajzoló bárhonnan történő előhívásához:
     - `Ctrl + 2` (alapértelmezett)

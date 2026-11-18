@@ -145,9 +145,9 @@ Open the **Settings** dialog from the toolbar logo menu or tray icon:
 
 DrawIt is available in multiple formats on [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest):
 
-* **Portable Version (Recommended)**: `DrawIt.exe` or `Standalone_Files.zip` – zero installation, runs anywhere (including USB drives).
-* **Microsoft Store / MSIX Package**: [Get it from Microsoft Store](ms-windows-store://pdp/?productid=9NHQC57FT5LQ) or download the standalone `DrawIt.msix` package.
-* **Windows Installer**: `DrawIt-Setup.exe` – classic setup wizard with Start Menu integration (per-user install, no admin privileges required).
+* **Portable Version (Recommended)**: `DrawIt.exe` – zero installation, runs anywhere (including USB drives) with built-in auto-updater.
+* **Microsoft Store / MSIX Package**: [Get it from Microsoft Store](ms-windows-store://pdp/?productid=9NHQC57FT5LQ) or install the standalone `DrawIt.msix` package.
+* **Microsoft Store Installer**: `DrawIt - Draw on Screen Installer.exe` – official Microsoft Store installer.
 
 ### Getting Started
 1. Download your preferred package from [**GitHub Releases**](https://github.com/csuszy/DrawIt/releases/latest).
