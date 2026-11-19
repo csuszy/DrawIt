@@ -108,7 +108,8 @@ if ($cargoToml -match '(?m)^version\s*=\s*"([^"]+)"') {
     $verParts = $rawVer.Split('.')
     while ($verParts.Count -lt 4) { $verParts += "0" }
     $msixVer = ($verParts[0..3]) -join '.'
-    $manifestContent = [regex]::Replace($manifestContent, 'Version="[0-9.]+"', "Version=""$msixVer""")
+    # Csak az Identity elemen beluli Version attributumot csereljuk, a MinVersion/MaxVersion erintetlen marad
+    $manifestContent = [regex]::Replace($manifestContent, '(?<=<Identity[^>]*?)Version="[^"]+"', "Version=""$msixVer""")
     Write-Host "   MSIX Verzio automatikusan szinkronizalva a Cargo.toml alapjan: $msixVer" -ForegroundColor Green
 }
 
