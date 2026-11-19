@@ -9,7 +9,7 @@
   <Identity
     Name="csuszy.DrawIt-DrawonScreen"
     Publisher="CN=0D299B98-5051-435C-8BB5-970045368EEC"
-    Version="0.3.0.0"
+    Version="0.4.0.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
@@ -41,6 +41,14 @@
         BackgroundColor="transparent"
         Square150x150Logo="Assets/Square150x150Logo.png"
         Square44x44Logo="Assets/Square44x44Logo.png" />
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="DrawIt.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask
+            TaskId="DrawItStartup"
+            Enabled="true"
+            DisplayName="DrawIt - Draw on Screen" />
+        </desktop:Extension>
+      </Extensions>
     </Application>
   </Applications>
 </Package>

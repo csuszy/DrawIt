@@ -1,6 +1,10 @@
 # DrawIt - Microsoft Store MSIX Build Script
 # Forditas a 'store' feature-rel es kozvetlenul feltoltheto MSIX csomag keszitese
 
+param(
+    [switch]$Sign = $false
+)
+
 $ErrorActionPreference = "Stop"
 
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -164,6 +168,35 @@ if ($LASTEXITCODE -ne 0) {
 
 # Masolas a gyokerbe is, hogy mindket helyrol elerheto legyen
 Copy-Item $outMsixDist $outMsixRoot -Force
+
+if ($Sign) {
+    Write-Host "`n[5/5] MSIX alairasa helyi teszteleshez (signtool)..." -ForegroundColor Yellow
+    $signtoolCandidates = @(
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Microsoft.MSIX-Toolkit_Microsoft.Winget.Source_8wekyb3d8bbwe\MSIX-Toolkit.x64\signtool.exe",
+        "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe",
+        "C:\Program Files\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
+    )
+    $signtool = $signtoolCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($signtool) {
+        $pfxPath = "target\DrawIt_Dev.pfx"
+        if (-not (Test-Path $pfxPath)) {
+            Write-Host "   Onallo alairo tanusitvany letrehozasa..." -ForegroundColor DarkGray
+            $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=0D299B98-5051-435C-8BB5-970045368EEC" -KeyUsage DigitalSignature -FriendlyName "DrawIt Dev" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+            $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("TrustedPeople", "CurrentUser")
+            $store.Open("ReadWrite")
+            $store.Add($cert)
+            $store.Close()
+            $pwd = ConvertTo-SecureString -String "DrawItDev123" -Force -AsPlainText
+            Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pwd | Out-Null
+        }
+        & $signtool sign /fd SHA256 /a /f $pfxPath /p "DrawItDev123" $outMsixDist | Out-Null
+        & $signtool sign /fd SHA256 /a /f $pfxPath /p "DrawItDev123" $outMsixRoot | Out-Null
+        Write-Host "   Sikeresen alairva: $outMsixRoot" -ForegroundColor Green
+        Write-Host "   Tanusitvany rogzitve a Megbizhato szemelyek (TrustedPeople) taroloba." -ForegroundColor Green
+    } else {
+        Write-Warning "Signtool.exe nem talalhato, az alairas kimaradt."
+    }
+}
 
 $msixItem = Get-Item $outMsixDist
 Write-Host "`n==========================================" -ForegroundColor Green

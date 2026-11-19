@@ -100,7 +100,22 @@ impl TrayState {
     }
 }
 
+fn get_packaged_startup_task() -> Option<windows::ApplicationModel::StartupTask> {
+    use windows::core::HSTRING;
+    use windows::ApplicationModel::StartupTask;
+    let op = StartupTask::GetAsync(&HSTRING::from("DrawItStartup")).ok()?;
+    op.get().ok()
+}
+
 pub fn is_autostart_enabled() -> bool {
+    // 1. If running as packaged app (MSIX / Store), check WinRT StartupTask
+    if let Some(task) = get_packaged_startup_task() {
+        if let Ok(state) = task.State() {
+            return state == windows::ApplicationModel::StartupTaskState::Enabled;
+        }
+    }
+
+    // 2. Fallback to Windows Registry (for portable standalone exe)
     unsafe {
         let mut hkey: HKEY = mem::zeroed();
         let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
@@ -119,6 +134,21 @@ pub fn is_autostart_enabled() -> bool {
 }
 
 pub fn set_autostart_enabled(enable: bool) -> bool {
+    // 1. If running as packaged app (MSIX / Store), update WinRT StartupTask
+    if let Some(task) = get_packaged_startup_task() {
+        if enable {
+            if let Ok(req_op) = task.RequestEnableAsync() {
+                if let Ok(new_state) = req_op.get() {
+                    return new_state == windows::ApplicationModel::StartupTaskState::Enabled;
+                }
+            }
+        } else {
+            let _ = task.Disable();
+            return true;
+        }
+    }
+
+    // 2. Fallback to Windows Registry (for portable standalone exe)
     unsafe {
         let mut hkey: HKEY = mem::zeroed();
         let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");

@@ -88,19 +88,9 @@ impl Language {
     }
 
     pub fn menu_check_updates(&self) -> &'static str {
-        #[cfg(feature = "store")]
-        {
-            match self {
-                Language::Hu => "Frissítések keresése (Microsoft Store)...",
-                Language::En => "Check for Updates (Microsoft Store)...",
-            }
-        }
-        #[cfg(not(feature = "store"))]
-        {
-            match self {
-                Language::Hu => "Frissítések keresése...",
-                Language::En => "Check for Updates...",
-            }
+        match self {
+            Language::Hu => "Frissítések keresése...",
+            Language::En => "Check for Updates...",
         }
     }
 
@@ -538,8 +528,8 @@ impl Language {
         #[cfg(feature = "store")]
         {
             match self {
-                Language::Hu => "Frissítések keresése a Microsoft Store-ban (Megnyitás)",
-                Language::En => "Check for updates in Microsoft Store (Open Store)",
+                Language::Hu => "Frissítések keresése...",
+                Language::En => "Check for updates...",
             }
         }
         #[cfg(not(feature = "store"))]
@@ -742,19 +732,9 @@ impl Language {
     }
 
     pub fn tray_updates(&self) -> &'static str {
-        #[cfg(feature = "store")]
-        {
-            match self {
-                Language::Hu => "Frissítések keresése (Microsoft Store)...",
-                Language::En => "Check for Updates (Microsoft Store)...",
-            }
-        }
-        #[cfg(not(feature = "store"))]
-        {
-            match self {
-                Language::Hu => "Frissítések keresése...",
-                Language::En => "Check for Updates...",
-            }
+        match self {
+            Language::Hu => "Frissítések keresése...",
+            Language::En => "Check for Updates...",
         }
     }
 
@@ -840,11 +820,11 @@ impl Language {
         {
             match self {
                 Language::Hu => format!(
-                    "A legújabb DrawIt verziót használod (v{}).\nNincs újabb frissítés a Microsoft Store-ban.",
+                    "A legújabb DrawIt verziót használod (v{}).\nNincs újabb elérhető frissítés.",
                     cur
                 ),
                 Language::En => format!(
-                    "You are already using the latest DrawIt version (v{}).\nNo newer update available on Microsoft Store.",
+                    "You are already using the latest DrawIt version (v{}).\nNo newer update available.",
                     cur
                 ),
             }
